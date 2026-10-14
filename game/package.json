@@ -8,10 +8,10 @@
     "test": "node dev/test-api.mjs"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "dependencies": {
     "@upstash/redis": "1.39.0",
-    "@vercel/blob": "1.1.1"
+    "@vercel/blob": "2.8.0"
   }
 }
