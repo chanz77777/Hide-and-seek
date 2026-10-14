@@ -1,0 +1,130 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 380" width="100%" font-family="'Noto Sans JP', system-ui, sans-serif">
+<defs>
+<linearGradient id="hp-shade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#dedbd3"/></linearGradient>
+<marker id="hp-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="#2d6ad8"/></marker>
+<symbol id="hp-star" viewBox="-30 -30 60 60" width="60" height="60" overflow="visible"><polygon points="0,-24 7,-8 24,-7 11,4 15,21 0,12 -15,21 -11,4 -24,-7 -7,-8" fill="#f2d64b"/></symbol>
+<symbol id="hp-heart" viewBox="-30 -30 60 60" width="60" height="60" overflow="visible"><path d="M0 20C-4 14 -24 4 -24 -8C-24 -17 -17 -22 -11 -22C-6 -22 -2 -19 0 -15C2 -19 6 -22 11 -22C17 -22 24 -17 24 -8C24 4 4 14 0 20Z" fill="#e03a3a"/></symbol>
+<symbol id="hp-apple" viewBox="-30 -30 60 60" width="60" height="60" overflow="visible"><circle cx="0" cy="4" r="19" fill="#e03a3a"/><rect x="-1.5" y="-22" width="3" height="9" rx="1" fill="#2b2d33"/><ellipse cx="7" cy="-16" rx="7" ry="3.5" transform="rotate(-30 7 -16)" fill="#4cae4f"/></symbol>
+<symbol id="hp-donut" viewBox="-30 -30 60 60" width="60" height="60" overflow="visible"><path fill-rule="evenodd" d="M-21 0a21 21 0 1 0 42 0a21 21 0 1 0 -42 0M-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0" fill="#f08bb0"/><rect x="-14" y="-8" width="6" height="2" rx="1" fill="#f2d64b" transform="rotate(30 -11 -7)"/><rect x="6" y="-12" width="6" height="2" rx="1" fill="#2d6ad8" transform="rotate(-40 9 -11)"/><rect x="10" y="6" width="6" height="2" rx="1" fill="#4cae4f" transform="rotate(60 13 7)"/></symbol>
+<symbol id="hp-fish" viewBox="-30 -30 60 60" width="60" height="60" overflow="visible"><ellipse cx="-3" cy="0" rx="18" ry="11" fill="#2d6ad8"/><path d="M12 0L26 -11V11Z" fill="#2d6ad8"/><circle cx="-12" cy="-3" r="2.5" fill="#ffffff"/><circle cx="-12" cy="-3" r="1.2" fill="#2b2d33"/></symbol>
+<symbol id="hp-pizza" viewBox="-30 -30 60 60" width="60" height="60" overflow="visible"><path d="M0 26L-22 -18Q0 -30 22 -18Z" fill="#f2d64b"/><path d="M-22 -18Q0 -30 22 -18L19 -12Q0 -22 -19 -12Z" fill="#f28c28"/><circle cx="-6" cy="-6" r="4" fill="#e03a3a"/><circle cx="7" cy="1" r="4" fill="#e03a3a"/><circle cx="-1" cy="12" r="3.5" fill="#e03a3a"/></symbol>
+<!-- mannequin, top view, lying, ~70x28 centered at 0,0 -->
+<symbol id="hp-mann" viewBox="-45 -20 90 40" width="90" height="40" overflow="visible">
+<circle cx="-26" cy="0" r="9" fill="currentColor"/>
+<rect x="-18" y="-9" width="38" height="18" rx="9" fill="currentColor"/>
+<rect x="-16" y="-14" width="30" height="7" rx="3.5" transform="rotate(-8 -16 -10)" fill="currentColor"/>
+<rect x="-16" y="7" width="30" height="7" rx="3.5" transform="rotate(8 -16 10)" fill="currentColor"/>
+<rect x="16" y="-8" width="24" height="7" rx="3.5" transform="rotate(-6 16 -4)" fill="currentColor"/>
+<rect x="16" y="1" width="24" height="7" rx="3.5" transform="rotate(6 16 4)" fill="currentColor"/>
+</symbol>
+<pattern id="hp-dots" width="40" height="40" patternUnits="userSpaceOnUse">
+<rect width="40" height="40" fill="#f2d64b"/>
+<circle cx="20" cy="20" r="10" fill="#f08bb0"/>
+<circle cx="0" cy="0" r="6" fill="#2d6ad8"/><circle cx="40" cy="0" r="6" fill="#2d6ad8"/><circle cx="0" cy="40" r="6" fill="#2d6ad8"/><circle cx="40" cy="40" r="6" fill="#2d6ad8"/>
+<path d="M20 0L23 6L17 6Z" fill="#4cae4f"/><path d="M20 40L23 34L17 34Z" fill="#4cae4f"/>
+</pattern>
+<clipPath id="hp-patchclip"><rect x="365" y="66" width="230" height="190" rx="10" fill="#000"/></clipPath>
+<clipPath id="hp-mannclipL" transform="translate(795 175) scale(2.2)"><circle cx="-26" cy="0" r="9" fill="#000"/>
+<rect x="-18" y="-9" width="38" height="18" rx="9" fill="#000"/>
+<rect x="-16" y="-14" width="30" height="7" rx="3.5" transform="rotate(-8 -16 -10)" fill="#000"/>
+<rect x="-16" y="7" width="30" height="7" rx="3.5" transform="rotate(8 -16 10)" fill="#000"/>
+<rect x="16" y="-8" width="24" height="7" rx="3.5" transform="rotate(-6 16 -4)" fill="#000"/>
+<rect x="16" y="1" width="24" height="7" rx="3.5" transform="rotate(6 16 4)" fill="#000"/></clipPath>
+<clipPath id="hp-leftclip"><rect x="660" y="60" width="135" height="230" fill="#000"/></clipPath>
+</defs>
+<rect x="0" y="0" width="960" height="380" fill="#f6f3ec"/>
+
+<!-- ===== panel (a) ===== -->
+<rect x="15" y="10" width="300" height="360" rx="14" fill="#ffffff" stroke="#e3dfd5" stroke-width="2"/>
+<text x="165" y="42" font-size="18" font-weight="700" fill="#2b2d33" text-anchor="middle">寝転んだ姿勢で固定</text>
+<line x1="35" y1="288" x2="295" y2="288" stroke="#6e717c" stroke-width="2"/>
+<ellipse cx="170" cy="289" rx="118" ry="6" fill="#2b2d33" opacity=".12"/>
+<g fill="url(#hp-shade)" stroke="#d3cfc6" stroke-width="1.2">
+<rect x="186" y="264" width="86" height="22" rx="11" fill="#dedbd3"/>
+<rect x="182" y="256" width="92" height="26" rx="13" fill="url(#hp-shade)"/>
+<rect x="88" y="250" width="104" height="36" rx="17" fill="url(#hp-shade)"/>
+<circle cx="70" cy="265" r="20" fill="url(#hp-shade)"/>
+<rect x="102" y="240" width="78" height="17" rx="8.5" fill="url(#hp-shade)"/>
+</g>
+<path d="M60 258Q62 262 66 263" stroke="#bfbbb2" stroke-width="2" fill="none"/>
+<text x="165" y="330" font-size="14" fill="#6e717c" text-anchor="middle">横から見た図：床に寝転んだまま動けない</text>
+<text x="165" y="352" font-size="14" fill="#6e717c" text-anchor="middle">（立ち上がり・歩行はできない）</text>
+
+<!-- ===== panel (b) ===== -->
+<rect x="330" y="10" width="300" height="360" rx="14" fill="#ffffff" stroke="#e3dfd5" stroke-width="2"/>
+<text x="480" y="42" font-size="18" font-weight="700" fill="#2b2d33" text-anchor="middle">スライド移動と回転</text>
+<rect x="365" y="66" width="230" height="190" rx="10" fill="#fbe7a6"/>
+<g clip-path="url(#hp-patchclip)">
+<use href="#hp-star" x="-30" y="-30" transform="translate(380 80) rotate(20)"/>
+<use href="#hp-pizza" x="-30" y="-30" transform="translate(430 72) rotate(-30)"/>
+<use href="#hp-heart" x="-30" y="-30" transform="translate(480 84) rotate(10)"/>
+<use href="#hp-donut" x="-30" y="-30" transform="translate(535 76)"/>
+<use href="#hp-fish" x="-30" y="-30" transform="translate(585 90) rotate(40)"/>
+<use href="#hp-apple" x="-30" y="-30" transform="translate(372 130) rotate(-10)"/>
+<use href="#hp-donut" x="-30" y="-30" transform="translate(422 125) rotate(15)"/>
+<use href="#hp-fish" x="-30" y="-30" transform="translate(475 130) rotate(-50)"/>
+<use href="#hp-star" x="-30" y="-30" transform="translate(528 128) rotate(35)"/>
+<use href="#hp-pizza" x="-30" y="-30" transform="translate(585 138) rotate(80)"/>
+<use href="#hp-heart" x="-30" y="-30" transform="translate(380 180) rotate(-25)"/>
+<use href="#hp-apple" x="-30" y="-30" transform="translate(435 185) rotate(60)"/>
+<use href="#hp-pizza" x="-30" y="-30" transform="translate(485 178) rotate(190)"/>
+<use href="#hp-donut" x="-30" y="-30" transform="translate(540 184) rotate(-15)"/>
+<use href="#hp-apple" x="-30" y="-30" transform="translate(590 190) rotate(25)"/>
+<use href="#hp-fish" x="-30" y="-30" transform="translate(372 232) rotate(120)"/>
+<use href="#hp-star" x="-30" y="-30" transform="translate(425 240) rotate(-40)"/>
+<use href="#hp-heart" x="-30" y="-30" transform="translate(478 236) rotate(30)"/>
+<use href="#hp-pizza" x="-30" y="-30" transform="translate(532 242) rotate(-100)"/>
+<use href="#hp-star" x="-30" y="-30" transform="translate(588 238) rotate(70)"/>
+</g>
+<rect x="365" y="66" width="230" height="190" rx="10" fill="none" stroke="#2b2d33" stroke-width="1.5"/>
+<use href="#hp-mann" x="-45" y="-20" transform="translate(480 161) rotate(-12)" color="#ffffff" stroke="#c9c5bc" stroke-width="1.5"/>
+<g stroke="#2d6ad8" stroke-width="3" fill="none" stroke-linecap="round" marker-end="url(#hp-arrow)">
+<path d="M480 128V100" fill="none"/>
+<path d="M480 194V222" fill="none"/>
+<path d="M432 161H404" fill="none"/>
+<path d="M528 161H556" fill="none"/>
+</g>
+<path d="M424 143A60 60 0 0 1 458 106" stroke="#2d6ad8" stroke-width="3" fill="none" stroke-linecap="round" marker-start="url(#hp-arrow)" marker-end="url(#hp-arrow)"/>
+<path d="M536 179A60 60 0 0 1 502 216" stroke="#2d6ad8" stroke-width="3" fill="none" stroke-linecap="round" marker-start="url(#hp-arrow)" marker-end="url(#hp-arrow)"/>
+<g font-size="14" font-weight="700" fill="#2b2d33" text-anchor="middle">
+<g stroke="#2b2d33" stroke-width="1.5" fill="#ffffff">
+<rect x="417" y="272" width="26" height="26" rx="5" fill="#ffffff"/>
+<rect x="387" y="302" width="26" height="26" rx="5" fill="#ffffff"/>
+<rect x="417" y="302" width="26" height="26" rx="5" fill="#ffffff"/>
+<rect x="447" y="302" width="26" height="26" rx="5" fill="#ffffff"/>
+<rect x="531" y="287" width="26" height="26" rx="5" fill="#ffffff"/>
+<rect x="571" y="287" width="26" height="26" rx="5" fill="#ffffff"/>
+</g>
+<text x="430" y="290">W</text><text x="400" y="320">A</text><text x="430" y="320">S</text><text x="460" y="320">D</text>
+<text x="544" y="305">Q</text><text x="564" y="305" font-weight="400" fill="#6e717c">/</text><text x="584" y="305">E</text>
+</g>
+<text x="430" y="350" font-size="14" fill="#6e717c" text-anchor="middle">スライド移動</text>
+<text x="564" y="350" font-size="14" fill="#6e717c" text-anchor="middle">回転</text>
+
+<!-- ===== panel (c) ===== -->
+<rect x="645" y="10" width="300" height="360" rx="14" fill="#ffffff" stroke="#e3dfd5" stroke-width="2"/>
+<text x="795" y="42" font-size="18" font-weight="700" fill="#2b2d33" text-anchor="middle">停止中はペイントモード</text>
+<rect x="660" y="60" width="270" height="230" rx="10" fill="url(#hp-dots)"/>
+<rect x="660" y="60" width="270" height="230" rx="10" fill="none" stroke="#2b2d33" stroke-width="1.5"/>
+<g transform="translate(795 175) scale(2.2)"><use href="#hp-mann" x="-45" y="-20" color="#ffffff" stroke="#c9c5bc" stroke-width="0.8"/></g>
+<g clip-path="url(#hp-mannclipL)"><g clip-path="url(#hp-leftclip)"><rect x="660" y="60" width="270" height="230" fill="url(#hp-dots)"/></g></g>
+<path d="M795 100V250" stroke="#2b2d33" stroke-width="1.5" stroke-dasharray="4 4" fill="none"/>
+<g transform="translate(804 150)">
+<circle cx="0" cy="0" r="17" fill="#ffffff" opacity=".35"/>
+<circle cx="0" cy="0" r="17" fill="none" stroke="#2b2d33" stroke-width="2.5"/>
+<path d="M-6 0H6M0 -6V6" stroke="#2b2d33" stroke-width="2" fill="none"/>
+</g>
+<text x="690" y="84" font-size="14" font-weight="700" fill="#2b2d33">塗装済み</text>
+<text x="860" y="84" font-size="14" font-weight="700" fill="#2b2d33">未塗装</text>
+<g transform="translate(0 316)">
+<rect x="700" y="-16" width="190" height="32" rx="16" fill="#ffffff" stroke="#e3dfd5" stroke-width="1.5"/>
+<circle cx="722" cy="0" r="9" fill="#e03a3a"/>
+<circle cx="750" cy="0" r="9" fill="#f28c28"/>
+<circle cx="778" cy="0" r="9" fill="#f2d64b"/>
+<circle cx="806" cy="0" r="9" fill="#4cae4f"/>
+<circle cx="834" cy="0" r="9" fill="#2d6ad8"/>
+<circle cx="862" cy="0" r="9" fill="#f08bb0"/>
+<circle cx="862" cy="0" r="12.5" fill="none" stroke="#2b2d33" stroke-width="2"/>
+</g>
+<text x="795" y="355" font-size="15" fill="#2b2d33" text-anchor="middle">体の表面に直接色を塗る</text>
+</svg>

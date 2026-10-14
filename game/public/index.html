@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>お絵描きかくれんぼ</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Zen+Maru+Gothic:wght@700&display=swap">
+<style>
+:root{
+  --panel:rgba(250,249,246,.94); --fg:#25272d; --muted:#6e717c; --line:#d6d4cc;
+  --accent:#2d6ad8; --accent-fg:#fff; --red:#e03a3a; --stage:#1f2228;
+  --font:'Noto Sans JP',system-ui,-apple-system,'Hiragino Sans','Yu Gothic',sans-serif;
+  --display:'Zen Maru Gothic','Noto Sans JP',system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--stage);color:var(--fg);font-family:var(--font);font-size:14px;line-height:1.5;overflow:hidden}
+#stage{position:fixed;inset:0}
+#stage canvas.gl{display:block;width:100%;height:100%;touch-action:none}
+#stage.paint canvas.gl{cursor:crosshair}
+#stage.topview canvas.gl{cursor:default}
+#stage.drop canvas.gl{cursor:cell}
+
+/* HUD */
+.hud{position:fixed;pointer-events:none}
+.hud > *{pointer-events:auto}
+#mmWrap{top:14px;left:14px;display:flex;flex-direction:column;gap:4px}
+#minimap{width:220px;height:165px;border:2px solid #fff;border-radius:6px;background:#000;box-shadow:0 4px 14px rgba(0,0,0,.4)}
+#mmLabel{font-size:11px;color:#cfd2da;letter-spacing:.04em}
+#topRight{top:14px;right:14px;display:flex;flex-direction:column;gap:8px;align-items:stretch;width:170px}
+#timer{background:var(--panel);border-radius:8px;padding:6px 12px;display:flex;justify-content:space-between;align-items:baseline}
+#timer span{font-size:12px;color:var(--muted)}
+#timer b{font-size:22px;font-variant-numeric:tabular-nums;font-weight:700}
+#timer.warn b{color:var(--red)}
+.btn{font:inherit;font-size:14px;padding:8px 12px;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--fg);cursor:pointer;white-space:nowrap}
+.btn.primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent);font-weight:700}
+.btn:disabled{opacity:.45;cursor:default}
+.btn:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+#bottom{left:14px;right:14px;bottom:14px;display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;background:var(--panel);border-radius:10px;padding:8px 12px}
+.seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{font:inherit;font-size:13px;padding:6px 14px;border:0;background:#fff;color:var(--fg);cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--accent);color:#fff;font-weight:700}
+#hint{font-size:12px;color:var(--muted);margin-left:auto}
+#paintTools{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center}
+#paintTools[hidden]{display:none}
+.swatches{display:flex;gap:5px}
+.sw{width:22px;height:22px;border-radius:50%;border:2px solid var(--line);padding:0;cursor:pointer}
+.sw[aria-pressed="true"]{border-color:var(--accent);box-shadow:0 0 0 2px #fff inset}
+input[type=color]{width:30px;height:24px;border:1px solid var(--line);border-radius:6px;padding:1px;background:#fff}
+.slider{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.slider input{width:90px;accent-color:var(--accent)}
+.slider output{font-variant-numeric:tabular-nums;color:var(--fg);min-width:2ch}
+
+/* overlays */
+.overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(20,22,27,.78);z-index:10}
+.overlay[hidden]{display:none}
+.panel{background:#faf9f6;border-radius:14px;padding:28px 32px;width:min(92vw,460px);box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.panel h1{font-family:var(--display);font-size:30px;margin:0 0 4px;line-height:1.2}
+.panel h2{font-family:var(--display);font-size:24px;margin:0 0 8px}
+.panel p{margin:0 0 12px;color:var(--muted)}
+.panel .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:14px}
+.panel .row[hidden]{display:none}
+.panel.dragover{outline:3px dashed var(--accent);outline-offset:-6px}
+.panel label{font-size:13px;color:var(--muted);display:flex;align-items:center;gap:6px}
+.panel input[type=number]{font:inherit;width:90px;padding:6px 8px;border:1px solid var(--line);border-radius:6px}
+.keys{font-size:13px;color:var(--fg);margin:12px 0 0;padding:0;list-style:none;display:grid;grid-template-columns:auto 1fr;gap:4px 12px}
+kbd{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:0 5px;background:#fff}
+#topBar{top:14px;left:50%;transform:translateX(-50%);background:var(--panel);border-radius:8px;padding:6px 12px;display:flex;gap:12px;align-items:center}
+#topBar[hidden]{display:none}
+#pip{right:14px;bottom:118px;width:320px;height:240px;border:2px solid #fff;border-radius:6px;box-shadow:0 4px 14px rgba(0,0,0,.4);cursor:zoom-in;pointer-events:auto}
+#pip[hidden]{display:none}
+#pipLabel{position:absolute;left:0;right:0;top:-20px;font-size:11px;color:#cfd2da;letter-spacing:.02em;text-align:right;pointer-events:none}
+#pip::before,#pip::after{content:"";position:absolute;left:50%;top:50%;background:rgba(255,255,255,.55);pointer-events:none}
+#pip::before{width:14px;height:1px;margin-left:-7px}
+#pip::after{width:1px;height:14px;margin-top:-7px}
+/* 見つける人 */
+#seekHud{top:14px;left:50%;transform:translateX(-50%);display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+#seekHud[hidden]{display:none}
+.chip{background:var(--panel);border-radius:8px;padding:6px 12px;display:flex;gap:8px;align-items:baseline;font-size:12px;color:var(--muted);white-space:nowrap}
+.chip b{font-size:20px;color:var(--fg);font-variant-numeric:tabular-nums}
+.chip.warn b{color:var(--red)}
+#bombDots{display:flex;gap:5px;align-self:center}
+#bombDots i{width:14px;height:14px;border-radius:50%;background:var(--fg);display:block}
+#bombDots i.used{background:var(--line)}
+#stage.seek canvas.gl{cursor:crosshair}
+.panel.wait{text-align:center}
+.wait .bigtime{font-family:var(--display);font-size:64px;line-height:1;margin:8px 0 14px;font-variant-numeric:tabular-nums}
+.wait .bar{height:8px;border-radius:99px;background:#e6e3da;overflow:hidden}
+.wait .bar i{display:block;height:100%;width:100%;background:var(--accent);transform-origin:left;transition:transform .25s linear}
+.wait .row{justify-content:center}
+.spy{position:relative;height:96px;margin:0 auto 8px;width:220px;border-radius:12px;overflow:hidden;
+  background:radial-gradient(circle,#d6d4cc 2px,transparent 2.5px) 0 0/16px 16px,#f1efe8}
+.spy .lens{position:absolute;left:0;top:14px;width:52px;height:52px;border:6px solid var(--fg);border-radius:50%;background:rgba(45,106,216,.15);animation:spy 3.2s ease-in-out infinite}
+.spy .lens::after{content:"";position:absolute;width:8px;height:26px;background:var(--fg);border-radius:4px;right:-12px;bottom:-22px;transform:rotate(-45deg)}
+@keyframes spy{0%{transform:translate(10px,0)}25%{transform:translate(80px,-6px)}50%{transform:translate(150px,10px)}75%{transform:translate(80px,14px)}100%{transform:translate(10px,0)}}
+.dots{display:inline-flex;gap:4px;margin-left:4px;vertical-align:middle}
+.dots i{width:6px;height:6px;border-radius:50%;background:var(--muted);animation:dot 1.2s ease-in-out infinite}
+.dots i:nth-child(2){animation-delay:.2s}.dots i:nth-child(3){animation-delay:.4s}
+@keyframes dot{0%,80%,100%{transform:translateY(0);opacity:.4}40%{transform:translateY(-6px);opacity:1}}
+@media (prefers-reduced-motion: reduce){.spy .lens,.dots i{animation:none}}
+.overlay.soft{background:transparent;align-items:flex-end;padding-bottom:24px;pointer-events:none}
+.overlay.soft .panel{pointer-events:auto}
+.panel.lobby{width:min(94vw,520px)}
+.eyebrow{font-size:11px;letter-spacing:.12em;color:var(--muted);margin:0}
+.roomcode{font-family:var(--display);font-size:52px;letter-spacing:.18em;line-height:1.1}
+.plist{list-style:none;padding:0;margin:14px 0 0;display:flex;flex-direction:column;gap:6px}
+.plist li{display:flex;align-items:center;gap:8px;padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:#fff}
+.plist li.off{opacity:.5}
+.plist .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.role{font-size:11.5px;padding:1px 8px;border-radius:99px;background:#e6e3da;color:var(--fg)}
+.role.seeker{background:var(--red);color:#fff}
+.plist .small{font-size:12px;padding:3px 8px}
+select{font:inherit;padding:4px 6px;border:1px solid var(--line);border-radius:6px;background:#fff}
+.panel h2.win{color:var(--accent)} .panel h2.lose{color:var(--red)}
+/* 観戦中の表示 */
+.chip[hidden]{display:none}
+.chip.spect{background:var(--accent);color:#fff;font-weight:700}
+/* 爆発時の画面の揺れ */
+#stage.shake{animation:shake .38s cubic-bezier(.36,.07,.19,.97)}
+@keyframes shake{10%,90%{transform:translate(-2px,1px)}20%,80%{transform:translate(4px,-2px)}30%,50%,70%{transform:translate(-6px,3px)}40%,60%{transform:translate(6px,-3px)}}
+/* カットイン: 画面中央を斜めの帯が横切り、文字が飛び込んでくる */
+#cutin{inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:30;overflow:hidden}
+#cutin[hidden]{display:none}
+#cutin .band{flex:none;width:140vw;padding:22px 0;text-align:center;transform:rotate(-6deg) translateX(110%);
+  background:repeating-linear-gradient(135deg,rgba(255,255,255,.18) 0 14px,transparent 14px 28px),var(--cut-bg);
+  box-shadow:0 10px 0 rgba(0,0,0,.25),0 -10px 0 rgba(0,0,0,.25)}
+#cutin span{display:inline-block;font-family:var(--display);font-size:clamp(34px,7vw,72px);font-weight:700;letter-spacing:.06em;color:var(--cut-fg);
+  text-shadow:4px 4px 0 rgba(0,0,0,.25);transform:scale(.6);opacity:0}
+#cutin.win{--cut-bg:#f2d64b;--cut-fg:#25272d}
+#cutin.lose{--cut-bg:#e03a3a;--cut-fg:#fff}
+#cutin.play .band{animation:cutBand 2.2s cubic-bezier(.2,.8,.2,1) forwards}
+#cutin.play span{animation:cutText 2.2s cubic-bezier(.2,.8,.2,1) forwards}
+@keyframes cutBand{0%{transform:rotate(-6deg) translateX(110%)}18%,78%{transform:rotate(-6deg) translateX(0)}100%{transform:rotate(-6deg) translateX(-110%)}}
+@keyframes cutText{0%,12%{transform:scale(.6);opacity:0}24%{transform:scale(1.12);opacity:1}32%,78%{transform:scale(1);opacity:1}100%{transform:scale(1);opacity:0}}
+@media (prefers-reduced-motion: reduce){#stage.shake{animation:none}#cutin.play .band{animation:none;transform:rotate(-6deg)}#cutin.play span{animation:none;opacity:1;transform:none}}
+#toast{bottom:84px;left:50%;transform:translateX(-50%);background:rgba(37,39,45,.9);color:#fff;padding:6px 14px;border-radius:999px;font-size:13px;opacity:0;transition:opacity .25s}
+#toast.show{opacity:1}
+</style>
+</head>
+<body>
+<div id="stage"></div>
+
+<div class="hud" id="mmWrap">
+  <canvas id="minimap" width="440" height="330"></canvas>
+  <div id="mmLabel">床全体 · 赤 = 自分</div>
+</div>
+
+<div class="hud" id="topRight">
+  <div id="timer"><span>残り</span><b id="timerText">1:30</b></div>
+  <button class="btn primary" id="readyBtn" type="button">準備完了</button>
+</div>
+
+<div class="hud" id="topBar" hidden>
+  <span>確認ビュー: 見つける人から見える景色</span>
+  <label class="slider" title="見つける人のターンでは、制限時間が迫るにつれて 0% → 100% に増える予定">影・ツヤ <input type="range" id="shade" min="0" max="100" value="0" step="5"><output id="shadeOut">0</output>%</label>
+  <button class="btn" id="backBtn" type="button">戻る</button>
+</div>
+
+<div class="hud" id="bottom">
+  <div class="seg" role="group" aria-label="モード">
+    <button type="button" id="modeMove" data-mode="move" aria-pressed="true">移動</button>
+    <button type="button" id="modePaint" data-mode="paint" aria-pressed="false">ペイント</button>
+  </div>
+  <div id="paintTools" hidden>
+    <div class="swatches" id="swatches"></div>
+    <input type="color" id="colorPicker" value="#e03a3a" title="自由な色">
+    <label class="slider">太さ <input type="range" id="size" min="1" max="30" value="6"><output id="sizeOut">6</output></label>
+    <label class="slider">硬さ <input type="range" id="hard" min="0" max="100" value="85" step="5"><output id="hardOut">85</output></label>
+    <div class="seg" role="group" aria-label="ブラシ種別">
+      <button type="button" id="toolBrush" aria-pressed="true">ブラシ</button>
+      <button type="button" id="toolFill" aria-pressed="false">パーツ塗り</button>
+      <button type="button" id="toolDrop" aria-pressed="false" title="床や体の色を拾う（Alt+クリックでも可）">スポイト</button>
+    </div>
+    <button class="btn primary" id="camoBtn" type="button" title="真下の床と同じ色で体を細かく塗る（彩度を少しだけ変える）">一括擬態</button>
+    <button class="btn" id="undoBtn" type="button" disabled>元に戻す</button>
+    <button class="btn" id="resetBtn" type="button">全部消す</button>
+  </div>
+  <span id="hint">WASD 移動 · Q/E 回転 · Space でペイント</span>
+</div>
+
+<div class="hud" id="pip" hidden title="クリックで拡大率を切り替え">
+  <div id="pipLabel">見つける人の見え方 · 同じ縮尺（クリックで拡大）</div>
+</div>
+
+<div class="hud" id="toast"></div>
+
+<div class="overlay" id="titleOverlay">
+  <div class="panel">
+    <h1>お絵描きかくれんぼ</h1>
+    <p>絵でいっぱいの床に寝転んで、体に色を塗って溶け込もう。</p>
+    <ul class="keys">
+      <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></li><li>床の上をスライド移動</li>
+      <li><kbd>Q</kbd> <kbd>E</kbd></li><li>その場で回転</li>
+      <li><kbd>Space</kbd></li><li>ペイントモード切替（停止中のみ）</li>
+      <li>右ドラッグ / ホイール</li><li>ペイント中の視点回転 / ズーム</li>
+      <li><kbd>Enter</kbd></li><li>準備完了</li>
+    </ul>
+    <div class="row">
+      <span style="font-size:13px;color:var(--muted)">床の絵</span>
+      <div class="seg" role="group" aria-label="床の絵">
+        <button type="button" id="srcGen" aria-pressed="false">自動生成</button>
+        <button type="button" id="srcImg" aria-pressed="true">画像を取り込む</button>
+      </div>
+    </div>
+    <div class="row" id="genRow" hidden>
+      <label>床の番号 <input type="number" id="seedInput" min="1" max="99999"></label>
+      <button class="btn" id="reseedBtn" type="button">別の床にする</button>
+    </div>
+    <div class="row" id="imgRow">
+      <label class="btn" for="imgFile" style="cursor:pointer">画像を選ぶ…</label>
+      <input type="file" id="imgFile" accept="image/*" hidden>
+      <span id="imgInfo" style="font-size:13px;color:var(--muted)">床の比率（4:3）に中央で切り抜きます。ここに画像をドロップしても可。</span>
+    </div>
+    <div class="row">
+      <button class="btn primary" id="startBtn" type="button">隠れる（90 秒）</button>
+      <span id="loadMsg" style="font-size:13px;color:var(--muted)">床を描いています…</span>
+    </div>
+    <div id="onlineBox" hidden style="border-top:1px solid var(--line);margin-top:14px;padding-top:14px">
+      <div style="font-size:13px;font-weight:700;margin-bottom:2px">オンラインで遊ぶ</div>
+      <div class="row" style="margin-top:6px">
+        <label>名前 <input type="text" id="nameInput" maxlength="16" placeholder="なまえ" style="font:inherit;width:120px;padding:6px 8px;border:1px solid var(--line);border-radius:6px"></label>
+        <button class="btn primary" id="createRoomBtn" type="button">部屋を作る</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <label>部屋コード <input type="text" id="codeInput" maxlength="4" placeholder="ABCD" autocomplete="off" style="font:inherit;width:80px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;text-transform:uppercase;letter-spacing:.15em"></label>
+        <button class="btn" id="joinRoomBtn" type="button">参加する</button>
+      </div>
+      <p id="onlineMsg" style="font-size:12.5px;margin:8px 0 0"></p>
+    </div>
+    <div class="row" style="border-top:1px solid var(--line);padding-top:14px">
+      <button class="btn" id="seekWaitBtn" type="button">見つける人になる</button>
+      <span style="font-size:12.5px;color:var(--muted)">同じ PC の別タブで、隠れる人の準備を待ちます</span>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="doneOverlay" hidden>
+  <div class="panel">
+    <h2 id="doneTitle">準備完了！</h2>
+    <p id="doneMsg">隠れる人の準備が終わりました。見つける人に交代します（次のステップで実装）。</p>
+    <div class="row">
+      <button class="btn primary" id="seekHereBtn" type="button">この画面で見つける人に交代</button>
+      <button class="btn" id="viewBtn" type="button">確認ビュー（真上から見る）</button>
+      <button class="btn" id="againBtn" type="button">タイトルに戻る</button>
+      <button class="btn primary" id="lobbyBackBtn" type="button" hidden>ロビーに戻る</button>
+    </div>
+  </div>
+</div>
+
+<div class="hud" id="seekHud" hidden>
+  <div class="chip">残り爆弾 <span id="bombDots"></span></div>
+  <div class="chip">発見 <b id="foundText">0 / 1</b></div>
+  <div class="chip" id="seekTimeChip">残り <b id="seekTime">1:00</b></div>
+  <div class="chip spect" id="spectateChip" hidden>観戦中 · 見つける人の画面</div>
+</div>
+
+<div id="cutin" class="hud" hidden aria-live="assertive"><div class="band"><span id="cutinText"></span></div></div>
+
+<div class="overlay" id="waitOverlay" hidden>
+  <div class="panel wait">
+    <div class="spy" aria-hidden="true"><div class="lens"></div></div>
+    <h2 id="waitTitle">隠れる人が準備中<span class="dots"><i></i><i></i><i></i></span></h2>
+    <div class="bigtime" id="waitTime">-:--</div>
+    <div class="bar"><i id="waitBar"></i></div>
+    <p id="waitMsg" style="margin-top:12px">隠れる人の画面を別のタブで開き、「隠れる」を押すと始まります。</p>
+    <div class="row">
+      <button class="btn primary" id="handoffBtn" type="button" hidden>見つける人、準備 OK</button>
+      <button class="btn" id="waitCancelBtn" type="button">タイトルに戻る</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="lobbyOverlay" hidden>
+  <div class="panel lobby">
+    <p class="eyebrow">部屋コード</p>
+    <div class="roomcode" id="roomCode">----</div>
+    <div class="row" style="margin-top:6px">
+      <input type="text" id="shareUrl" readonly style="flex:1;min-width:0;font:inherit;font-size:12px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:#fff">
+      <button class="btn" id="copyBtn" type="button">招待リンクをコピー</button>
+    </div>
+    <ul id="playerList" class="plist"></ul>
+    <div id="hostControls" hidden>
+      <div class="row">
+        <span style="font-size:13px;color:var(--muted)">床の絵</span>
+        <label class="btn" for="lobbyImgFile" style="cursor:pointer">画像を選ぶ…</label>
+        <input type="file" id="lobbyImgFile" accept="image/*" hidden>
+        <button class="btn" id="lobbyGenBtn" type="button">自動生成</button>
+      </div>
+      <div class="row">
+        <label>隠れる時間 <select id="prepSel"><option>60</option><option selected>90</option><option>120</option></select> 秒</label>
+        <label>探す時間 <select id="seekSel"><option>45</option><option selected>60</option><option>90</option></select> 秒</label>
+      </div>
+    </div>
+    <div class="row" style="align-items:flex-start">
+      <canvas id="floorThumb" width="160" height="120" style="border-radius:6px;background:#e6e3da"></canvas>
+      <p id="lobbyMsg" style="flex:1;min-width:0;margin:0;font-size:13px"></p>
+    </div>
+    <div class="row">
+      <button class="btn primary" id="startOnlineBtn" type="button" hidden>はじめる</button>
+      <button class="btn" id="leaveBtn" type="button">部屋を出る</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay soft" id="resultOverlay" hidden>
+  <div class="panel">
+    <h2 id="resultTitle">見つけた！</h2>
+    <p id="resultMsg"></p>
+    <div class="row"><button class="btn primary" id="resultBackBtn" type="button">タイトルに戻る</button></div>
+  </div>
+</div>
+
+<script src="vendor/three.min.js"></script>
+<script src="js/link.js"></script>
+<script src="js/floor.js"></script>
+<script src="js/paint.js"></script>
+<script src="js/main.js"></script>
+<script src="js/online.js"></script>
+</body>
+</html>

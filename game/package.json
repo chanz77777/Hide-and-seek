@@ -1,0 +1,17 @@
+{
+  "name": "oekaki-kakurenbo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node dev/server.mjs",
+    "test": "node dev/test-api.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@upstash/redis": "1.39.0",
+    "@vercel/blob": "1.1.1"
+  }
+}
