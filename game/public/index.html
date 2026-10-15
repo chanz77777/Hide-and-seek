@@ -28,16 +28,16 @@ body{margin:0;background:var(--stage);color:var(--fg);font-family:var(--font);fo
 #minimap{width:220px;height:165px;border:2px solid #fff;border-radius:6px;background:#000;box-shadow:0 4px 14px rgba(0,0,0,.4)}
 #mmLabel{font-size:11px;color:#cfd2da;letter-spacing:.04em}
 #topRight{top:14px;right:14px;display:flex;flex-direction:column;gap:8px;align-items:stretch;width:170px}
-#timer{background:var(--panel);border-radius:8px;padding:6px 12px;display:flex;justify-content:space-between;align-items:baseline}
+#timer{background:var(--panel);border-radius:18px 26px 16px 22px/22px 16px 24px 18px;padding:6px 14px;display:flex;justify-content:space-between;align-items:baseline;box-shadow:0 4px 14px rgba(0,0,0,.22);border:1px solid rgba(255,255,255,.5)}
 #timer span{font-size:12px;color:var(--muted)}
 #timer b{font-size:22px;font-variant-numeric:tabular-nums;font-weight:700}
 #timer.warn b{color:var(--red)}
-.btn{font:inherit;font-size:14px;padding:8px 12px;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--fg);cursor:pointer;white-space:nowrap}
+.btn{font:inherit;font-size:14px;padding:8px 12px;border-radius:10px 14px 10px 13px/12px 10px 13px 11px;border:1px solid var(--line);background:#fff;color:var(--fg);cursor:pointer;white-space:nowrap}
 .btn.primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent);font-weight:700}
 .btn:disabled{opacity:.45;cursor:default}
 .btn:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
-#bottom{left:14px;right:14px;bottom:14px;display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;background:var(--panel);border-radius:10px;padding:8px 12px}
-.seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+#bottom{left:14px;right:14px;bottom:14px;display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;background:var(--panel);border-radius:24px 30px 22px 28px/28px 22px 30px 24px;padding:8px 16px;box-shadow:0 6px 22px rgba(0,0,0,.28);border:1px solid rgba(255,255,255,.5)}
+.seg{display:flex;border:1px solid var(--line);border-radius:10px 14px 10px 13px/12px 10px 13px 11px;overflow:hidden}
 .seg button{font:inherit;font-size:13px;padding:6px 14px;border:0;background:#fff;color:var(--fg);cursor:pointer}
 .seg button[aria-pressed="true"]{background:var(--accent);color:#fff;font-weight:700}
 #hint{font-size:12px;color:var(--muted);margin-left:auto}
@@ -47,14 +47,17 @@ body{margin:0;background:var(--stage);color:var(--fg);font-family:var(--font);fo
 .sw{width:22px;height:22px;border-radius:50%;border:2px solid var(--line);padding:0;cursor:pointer}
 .sw[aria-pressed="true"]{border-color:var(--accent);box-shadow:0 0 0 2px #fff inset}
 input[type=color]{width:30px;height:24px;border:1px solid var(--line);border-radius:6px;padding:1px;background:#fff}
+*[hidden]{display:none !important}
 .slider{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
 .slider input{width:90px;accent-color:var(--accent)}
 .slider output{font-variant-numeric:tabular-nums;color:var(--fg);min-width:2ch}
 
 /* overlays */
 .overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(20,22,27,.78);z-index:10}
-.overlay[hidden]{display:none}
-.panel{background:#faf9f6;border-radius:14px;padding:28px 32px;width:min(92vw,460px);box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.overlay[hidden],.overlay.soft[hidden]{display:none !important}
+.panel{position:relative;background:#faf9f6;border-radius:36px 48px 32px 44px/44px 34px 46px 36px;padding:28px 32px;width:min(92vw,460px);box-shadow:0 20px 60px rgba(0,0,0,.5),0 2px 12px rgba(0,0,0,.08);border:1px solid rgba(255,255,255,.7)}
+.panel::before{content:"";position:absolute;pointer-events:none;width:12px;height:12px;border-radius:50%;background:#faf9f6;top:-13px;right:34px;box-shadow:16px -6px 0 -3px #faf9f6,0 4px 10px rgba(0,0,0,.2)}
+.panel::after{content:"";position:absolute;pointer-events:none;width:10px;height:10px;border-radius:50%;background:#faf9f6;bottom:-12px;left:28px;box-shadow:-14px 6px 0 -2px #faf9f6,0 4px 10px rgba(0,0,0,.2)}
 .panel h1{font-family:var(--display);font-size:30px;margin:0 0 4px;line-height:1.2}
 .panel h2{font-family:var(--display);font-size:24px;margin:0 0 8px}
 .panel p{margin:0 0 12px;color:var(--muted)}
@@ -65,18 +68,19 @@ input[type=color]{width:30px;height:24px;border:1px solid var(--line);border-rad
 .panel input[type=number]{font:inherit;width:90px;padding:6px 8px;border:1px solid var(--line);border-radius:6px}
 .keys{font-size:13px;color:var(--fg);margin:12px 0 0;padding:0;list-style:none;display:grid;grid-template-columns:auto 1fr;gap:4px 12px}
 kbd{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:0 5px;background:#fff}
-#topBar{top:14px;left:50%;transform:translateX(-50%);background:var(--panel);border-radius:8px;padding:6px 12px;display:flex;gap:12px;align-items:center}
+#topBar{top:14px;left:50%;transform:translateX(-50%);background:var(--panel);border-radius:20px 28px 18px 26px/24px 18px 26px 20px;padding:6px 16px;display:flex;gap:12px;align-items:center;box-shadow:0 4px 14px rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.5)}
 #topBar[hidden]{display:none}
-#pip{right:14px;bottom:118px;width:320px;height:240px;border:2px solid #fff;border-radius:6px;box-shadow:0 4px 14px rgba(0,0,0,.4);cursor:zoom-in;pointer-events:auto}
+#pip{right:14px;bottom:118px;width:320px;height:240px;border:2px solid #fff;border-radius:12px;box-shadow:0 4px 14px rgba(0,0,0,.4);cursor:zoom-in;pointer-events:auto}
 #pip[hidden]{display:none}
 #pipLabel{position:absolute;left:0;right:0;top:-20px;font-size:11px;color:#cfd2da;letter-spacing:.02em;text-align:right;pointer-events:none}
 #pip::before,#pip::after{content:"";position:absolute;left:50%;top:50%;background:rgba(255,255,255,.55);pointer-events:none}
 #pip::before{width:14px;height:1px;margin-left:-7px}
 #pip::after{width:1px;height:14px;margin-top:-7px}
 /* 見つける人 */
-#seekHud{top:14px;left:50%;transform:translateX(-50%);display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+#seekHud{top:14px;left:14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;transition:opacity .25s,transform .25s}
 #seekHud[hidden]{display:none}
-.chip{background:var(--panel);border-radius:8px;padding:6px 12px;display:flex;gap:8px;align-items:baseline;font-size:12px;color:var(--muted);white-space:nowrap}
+body.hide-result-ui #seekHud{opacity:0;pointer-events:none;transform:translateY(-10px)}
+.chip{background:var(--panel);border-radius:18px 24px 16px 22px/22px 16px 24px 18px;padding:6px 14px;display:flex;gap:8px;align-items:baseline;font-size:12px;color:var(--muted);white-space:nowrap;box-shadow:0 4px 14px rgba(0,0,0,.22);border:1px solid rgba(255,255,255,.5)}
 .chip b{font-size:20px;color:var(--fg);font-variant-numeric:tabular-nums}
 .chip.warn b{color:var(--red)}
 #bombDots{display:flex;gap:5px;align-self:center}
@@ -98,8 +102,114 @@ kbd{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;border:1p
 .dots i:nth-child(2){animation-delay:.2s}.dots i:nth-child(3){animation-delay:.4s}
 @keyframes dot{0%,80%,100%{transform:translateY(0);opacity:.4}40%{transform:translateY(-6px);opacity:1}}
 @media (prefers-reduced-motion: reduce){.spy .lens,.dots i{animation:none}}
-.overlay.soft{background:transparent;align-items:flex-end;padding-bottom:24px;pointer-events:none}
-.overlay.soft .panel{pointer-events:auto}
+/* リキッドトランジション */
+#liquidCanvas{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:45;display:none}
+#liquidCanvas.active{display:block}
+
+/* リザルト画面・パネル */
+.overlay.soft{background:transparent;pointer-events:none;justify-content:flex-end;align-items:flex-end;padding:24px}
+.overlay.soft:not([hidden]){display:flex}
+.overlay.soft[hidden]{display:none !important}
+.overlay.soft .panel.result-panel{
+  pointer-events:auto;
+  width:min(90vw,360px);
+  padding:22px 24px 20px;
+  border-radius:16px;
+  background:rgba(255,255,255,.94);
+  backdrop-filter:blur(16px);
+  -webkit-backdrop-filter:blur(16px);
+  border:1px solid rgba(255,255,255,.7);
+  box-shadow:0 18px 48px rgba(0,0,0,.35),0 2px 8px rgba(0,0,0,.08);
+  margin:0;
+  animation:panelSlideIn .32s cubic-bezier(.16,1,.3,1);
+}
+.overlay.soft .panel.result-panel[hidden]{display:none !important}
+
+@keyframes panelSlideIn{
+  from{opacity:0;transform:translateY(16px) scale(.97)}
+  to{opacity:1;transform:translateY(0) scale(1)}
+}
+
+.result-header{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:10px}
+.result-header h2{margin:0;font-size:22px;font-family:var(--display);letter-spacing:.02em}
+
+/* ミニマルな閉じるアイコンボタン */
+.result-close-btn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:28px;
+  height:28px;
+  border-radius:50%;
+  border:1px solid var(--line);
+  background:rgba(0,0,0,.04);
+  color:var(--muted);
+  cursor:pointer;
+  padding:0;
+  transition:all .2s ease;
+}
+.result-close-btn:hover{
+  background:rgba(0,0,0,.09);
+  color:var(--fg);
+  transform:scale(1.08);
+}
+.result-close-btn:active{
+  transform:scale(.94);
+}
+
+/* プレミアムなフローティング・ピルボタン（最小化時） */
+.result-pill-btn{
+  position:fixed;
+  right:24px;
+  bottom:24px;
+  pointer-events:auto;
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding:10px 18px;
+  border-radius:999px;
+  background:rgba(26,29,36,.88);
+  backdrop-filter:blur(14px);
+  -webkit-backdrop-filter:blur(14px);
+  color:#fff;
+  border:1px solid rgba(255,255,255,.2);
+  box-shadow:0 10px 30px rgba(0,0,0,.4),0 0 0 1px rgba(0,0,0,.15);
+  cursor:pointer;
+  font-family:var(--font);
+  font-size:13.5px;
+  font-weight:700;
+  letter-spacing:.03em;
+  z-index:12;
+  transition:all .25s cubic-bezier(.16,1,.3,1);
+  animation:pillFadeIn .3s ease-out;
+}
+.result-pill-btn:hover{
+  background:rgba(37,42,54,.96);
+  border-color:rgba(255,255,255,.35);
+  box-shadow:0 14px 36px rgba(45,106,216,.45),0 0 0 1px rgba(255,255,255,.2);
+  transform:translateY(-2px);
+}
+.result-pill-btn:active{
+  transform:translateY(0) scale(.97);
+}
+.result-pill-btn .pill-icon{stroke:var(--accent);stroke-width:2.2}
+.result-pill-btn .pill-arrow{color:#9aa0b0;transition:transform .2s ease}
+.result-pill-btn:hover .pill-arrow{transform:translateY(-2px);color:#fff}
+.result-pill-btn[hidden]{display:none !important}
+
+@keyframes pillFadeIn{
+  from{opacity:0;transform:scale(.9) translateY(8px)}
+  to{opacity:1;transform:scale(1) translateY(0)}
+}
+
+@media (max-width: 600px){
+  .overlay.soft{justify-content:center;padding:14px}
+  .overlay.soft .panel.result-panel{width:100%}
+  #seekHud{left:50%;transform:translateX(-50%)}
+  .result-pill-btn{right:50%;transform:translateX(50%)}
+  .result-pill-btn:hover{transform:translateX(50%) translateY(-2px)}
+  .result-pill-btn:active{transform:translateX(50%)}
+}
 .panel.lobby{width:min(94vw,520px)}
 .eyebrow{font-size:11px;letter-spacing:.12em;color:var(--muted);margin:0}
 .roomcode{font-family:var(--display);font-size:52px;letter-spacing:.18em;line-height:1.1}
@@ -139,6 +249,7 @@ select{font:inherit;padding:4px 6px;border:1px solid var(--line);border-radius:6
 </head>
 <body>
 <div id="stage"></div>
+<canvas id="liquidCanvas"></canvas>
 
 <div class="hud" id="mmWrap">
   <canvas id="minimap" width="440" height="330"></canvas>
@@ -303,11 +414,29 @@ select{font:inherit;padding:4px 6px;border:1px solid var(--line);border-radius:6
 </div>
 
 <div class="overlay soft" id="resultOverlay" hidden>
-  <div class="panel">
-    <h2 id="resultTitle">見つけた！</h2>
-    <p id="resultMsg"></p>
-    <div class="row"><button class="btn primary" id="resultBackBtn" type="button">タイトルに戻る</button></div>
+  <div class="panel result-panel" id="resultPanel">
+    <div class="result-header">
+      <h2 id="resultTitle">見つけた！</h2>
+      <button class="result-close-btn" id="resultFoldBtn" type="button" title="パネルを最小化" aria-label="最小化">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="6 9 12 15 18 9"></polyline>
+        </svg>
+      </button>
+    </div>
+    <p id="resultMsg" style="margin:0 0 16px;line-height:1.6"></p>
+    <div class="row" style="margin:0"><button class="btn primary" id="resultBackBtn" type="button">タイトルに戻る</button></div>
   </div>
+  <button class="result-pill-btn" id="resultExpandBtn" type="button" hidden>
+    <svg class="pill-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="10"></circle>
+      <line x1="12" y1="16" x2="12" y2="12"></line>
+      <line x1="12" y1="8" x2="12.01" y2="8"></line>
+    </svg>
+    <span>結果を見る</span>
+    <svg class="pill-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="18 15 12 9 6 15"></polyline>
+    </svg>
+  </button>
 </div>
 
 <script src="vendor/three.min.js"></script>

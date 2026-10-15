@@ -175,8 +175,8 @@
     if (mode === 'paint') {
       const o = orbit;
       desired.set(camTarget.x + o.dist * Math.sin(o.phi) * Math.sin(o.theta),
-                  camTarget.y + o.dist * Math.cos(o.phi),
-                  camTarget.z + o.dist * Math.sin(o.phi) * Math.cos(o.theta));
+        camTarget.y + o.dist * Math.cos(o.phi),
+        camTarget.z + o.dist * Math.sin(o.phi) * Math.cos(o.theta));
     } else {
       const f = followZoom * PLAYER_SCALE * 1.3;
       desired.set(camTarget.x, camTarget.y + 7 * f, camTarget.z + 5.5 * f);
@@ -222,18 +222,22 @@
 
   function startRound(opts) {
     opts = opts || {};
-    phase = 'play'; view = 'main';
-    prepTotal = opts.prepSeconds || PREP_SECONDS; remaining = prepTotal;
-    player.position.set(opts.x || 0, 0, opts.z || 0); heading = opts.heading || 0; player.rotation.y = heading;
-    player.visible = true; clearRemotes(); spectating = false; remoteAim = null;
-    painter.reset(); setShading(0);
-    $('titleOverlay').hidden = true; $('doneOverlay').hidden = true; $('topBar').hidden = true;
-    $('readyBtn').disabled = false;
-    clearBombs(); setHud('hider');
-    setMode('move');
-    updateCamera(0, true);
-    prepEndsAt = opts.endsAt || nowMs() + prepTotal * 1000;
-    if (!net) Link.send('prep', { endsAt: prepEndsAt, prepSeconds: prepTotal });
+    const proceed = () => {
+      phase = 'play'; view = 'main';
+      prepTotal = opts.prepSeconds || PREP_SECONDS; remaining = prepTotal;
+      player.position.set(opts.x || 0, 0, opts.z || 0); heading = opts.heading || 0; player.rotation.y = heading;
+      player.visible = true; clearRemotes(); spectating = false; remoteAim = null;
+      painter.reset(); setShading(0);
+      $('titleOverlay').hidden = true; $('doneOverlay').hidden = true; $('topBar').hidden = true;
+      $('readyBtn').disabled = false;
+      clearBombs(); setHud('hider');
+      setMode('move');
+      updateCamera(0, true);
+      prepEndsAt = opts.endsAt || nowMs() + prepTotal * 1000;
+      if (!net) Link.send('prep', { endsAt: prepEndsAt, prepSeconds: prepTotal });
+    };
+    if (opts.noTransition) proceed();
+    else playLiquidTransition('start', proceed);
   }
   function finishRound(reason) {
     if (phase !== 'play') return;
@@ -253,7 +257,7 @@
     $('doneTitle').textContent = reason === 'timeout' ? '時間切れ！' : '準備完了！';
     $('doneMsg').textContent = (reason === 'timeout' ? 'この場所と色で隠れます。' : '')
       + (seekerSeen ? '見つける人のタブに送りました。見つける人のターンが始まります。'
-                    : '見つける人のタブがあれば自動で始まります。1 台で遊ぶ場合は交代してください。');
+        : '見つける人のタブがあれば自動で始まります。1 台で遊ぶ場合は交代してください。');
     $('seekHereBtn').hidden = false;
     $('doneOverlay').hidden = false;
   }
@@ -416,7 +420,7 @@
             const fi = (py * fw + px) * 4, oi = (y * W + x) * 4;
             const cr = fdata[fi], cg = fdata[fi + 1], cb = fdata[fi + 2];
             const g = 0.299 * cr + 0.587 * cg + 0.114 * cb;   // 彩度を落とし、少し白に寄せる
-            out[oi]     = (g + (cr - g) * CAMO_SAT) * (1 - CAMO_LIGHT) + 255 * CAMO_LIGHT;
+            out[oi] = (g + (cr - g) * CAMO_SAT) * (1 - CAMO_LIGHT) + 255 * CAMO_LIGHT;
             out[oi + 1] = (g + (cg - g) * CAMO_SAT) * (1 - CAMO_LIGHT) + 255 * CAMO_LIGHT;
             out[oi + 2] = (g + (cb - g) * CAMO_SAT) * (1 - CAMO_LIGHT) + 255 * CAMO_LIGHT;
             out[oi + 3] = 255;
@@ -513,10 +517,138 @@
     el.hidden = false; void el.offsetWidth; el.classList.add('play');
     clearTimeout(cutinTimer); cutinTimer = setTimeout(() => { el.hidden = true; el.classList.remove('play'); }, 2300);
   }
-  // カットイン中は結果パネルを少し待ってから出す（重ならないように）
+  // 結果パネルの折りたたみ（たたむ / 展開）
+  function setResultFolded(folded) {
+    const panel = $('resultPanel'), btn = $('resultExpandBtn');
+    if (panel) panel.hidden = folded;
+    if (btn) btn.hidden = !folded;
+    document.body.classList.toggle('hide-result-ui', folded);
+  }
+
+  const LIQUID_PALETTES = {
+    title: ['#80deea', '#26c6da', '#00838f'],        // 初回/タイトル画面: 爽快なミント・ターコイズ
+    start: ['#e1bee7', '#ab47bc', '#4a148c'],        // ゲームスタート: ネオンパープル・バイオレット
+    seek: ['#ffe082', '#ff9800', '#d84315'],         // 捜索開始: サンセットゴールド・オレンジ
+    handoff: ['#9fa8da', '#3f51b5', '#1a237e'],      // 交代待機: ロイヤルインディゴ
+    win: ['#68b9ff', '#2d6ad8', '#16439e'],          // リザルト勝利: 鮮やかなアクア・インクブルー
+    lose: ['#ff8f73', '#e03a3a', '#8a1818'],         // リザルト敗北: クリムゾン・ブラッドレッド
+    backToTitle: ['#c8e6c9', '#4caf50', '#1b5e20'],  // タイトルに戻る: セージグリーン・ライム
+  };
+
+  // リキッドトランジション演出（画面全体を有機的な液体の波が覆い、ステージや場面を切り替える）
+  function playLiquidTransition(themeOrWin, onCover, onComplete, opts) {
+    const cv = $('liquidCanvas');
+    if (!cv) {
+      if (onCover) onCover();
+      if (onComplete) onComplete();
+      return;
+    }
+    const ctx = cv.getContext('2d');
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    cv.width = w * dpr;
+    cv.height = h * dpr;
+    ctx.scale(dpr, dpr);
+    cv.classList.add('active');
+
+    let colors;
+    if (Array.isArray(themeOrWin)) {
+      colors = themeOrWin;
+    } else if (typeof themeOrWin === 'boolean') {
+      colors = themeOrWin ? LIQUID_PALETTES.win : LIQUID_PALETTES.lose;
+    } else {
+      colors = LIQUID_PALETTES[themeOrWin] || LIQUID_PALETTES.title;
+    }
+
+    const duration = (opts && opts.duration) || 2200; // 再生速度（約2.2s）
+    const startTime = performance.now();
+    let coveredCalled = false;
+
+    // 液体らしいスプラッシュイージング（急激に満ちて、なだらかに覆い、急激に抜ける）
+    const easeInOut = (t) => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+
+    function frame(now) {
+      const elapsed = now - startTime;
+      const t = Math.min(1, elapsed / duration);
+
+      // 画面全体が液体で覆われたタイミングでステージ状態を切り替え
+      if (t >= 0.48 && !coveredCalled) {
+        coveredCalled = true;
+        if (onCover) onCover();
+      }
+
+      ctx.clearRect(0, 0, w, h);
+
+      for (let layer = 0; layer < colors.length; layer++) {
+        const delay = layer * 0.055;
+        const lt = Math.max(0, Math.min(1, (t - delay) / (1 - delay * 1.2)));
+        if (lt <= 0) continue;
+
+        ctx.fillStyle = colors[layer];
+        ctx.beginPath();
+
+        const amp = Math.sin(lt * Math.PI) * (42 + layer * 18);
+        const freq1 = 0.0035 + layer * 0.0008;
+        const freq2 = 0.007 + layer * 0.0012;
+        const speed = 0.003 + layer * 0.0008;
+
+        let topY, bottomY;
+        if (lt < 0.5) {
+          const p = easeInOut(lt / 0.5);
+          topY = h * (1.18 - p * 1.36);
+          bottomY = h * 1.25;
+        } else {
+          const p = easeInOut((lt - 0.5) / 0.5);
+          topY = -h * 0.25;
+          bottomY = h * (1.15 - p * 1.45);
+        }
+
+        ctx.moveTo(0, bottomY);
+        const steps = 30;
+        const stepW = w / steps;
+        for (let i = 0; i <= steps; i++) {
+          const x = i * stepW;
+          const y = topY + Math.sin(x * freq1 + elapsed * speed + layer) * amp
+            + Math.cos(x * freq2 - elapsed * speed * 0.8 + layer * 1.5) * (amp * 0.45);
+          ctx.lineTo(x, y);
+        }
+
+        if (lt >= 0.5) {
+          const bAmp = Math.sin((lt - 0.5) * 2 * Math.PI) * (38 + layer * 12);
+          for (let i = steps; i >= 0; i--) {
+            const x = i * stepW;
+            const y = bottomY + Math.sin(x * freq1 * 1.1 + elapsed * speed * 0.9 + layer * 2) * bAmp
+              + Math.cos(x * freq2 * 0.9 - elapsed * speed * 0.6) * (bAmp * 0.4);
+            ctx.lineTo(x, y);
+          }
+        } else {
+          ctx.lineTo(w, bottomY);
+          ctx.lineTo(0, bottomY);
+        }
+
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      if (t < 1) {
+        requestAnimationFrame(frame);
+      } else {
+        ctx.clearRect(0, 0, w, h);
+        cv.classList.remove('active');
+        if (onComplete) onComplete();
+      }
+    }
+
+    requestAnimationFrame(frame);
+  }
+
+  // 結果パネルを表示
   function showResultPanel() {
-    const wait = $('cutin').hidden ? 0 : 1700;
-    setTimeout(() => { if (phase === 'result' || spectating) $('resultOverlay').hidden = false; }, wait);
+    if (phase === 'result' || spectating) {
+      setResultFolded(false);
+      $('resultOverlay').hidden = false;
+    }
   }
   function setRemoteAim(x, z) {
     if (!remoteAim) aimRing.position.set(x, 0.02, z);
@@ -571,27 +703,34 @@
   }
   // 1 台で交代するとき: 見つける人に画面を渡すための待機
   function enterHandoff() {
-    phase = 'wait'; seekLocal = true;
-    $('doneOverlay').hidden = true; $('waitOverlay').hidden = false; $('handoffBtn').hidden = false;
-    $('waitTitle').firstChild.textContent = '見つける人に交代';
-    $('waitTime').textContent = fmt(SEEK_SECONDS); $('waitBar').style.transform = 'scaleX(1)';
-    $('waitMsg').textContent = `画面を見つける人に渡してください。爆弾 ${BOMBS} 発・制限時間 ${SEEK_SECONDS} 秒です。`;
-    setHud('none'); player.visible = false; floorMesh.visible = false;
+    playLiquidTransition('handoff', () => {
+      phase = 'wait'; seekLocal = true;
+      $('doneOverlay').hidden = true; $('waitOverlay').hidden = false; $('handoffBtn').hidden = false;
+      $('waitTitle').firstChild.textContent = '見つける人に交代';
+      $('waitTime').textContent = fmt(SEEK_SECONDS); $('waitBar').style.transform = 'scaleX(1)';
+      $('waitMsg').textContent = `画面を見つける人に渡してください。爆弾 ${BOMBS} 発・制限時間 ${SEEK_SECONDS} 秒です。`;
+      setHud('none'); player.visible = false; floorMesh.visible = false;
+    });
   }
 
   // ----- 捜索（爆撃） -----
-  function startSeek(data) {
-    if (data) applyPayload(data);
-    phase = 'seek'; view = 'top';
-    seekTotal = SEEK_SECONDS; seekEndsAt = nowMs() + seekTotal * 1000; seekRemaining = seekTotal;
-    bombsTotal = BOMBS; bombsLeft = BOMBS; hidersCount = HIDERS; foundCount = 0;
-    clearBombs(); setShading(0);
-    painter.enabled = false; painter.cursor.visible = false; keys.clear();
-    floorMesh.visible = true; player.visible = true;
-    ['titleOverlay', 'waitOverlay', 'doneOverlay', 'resultOverlay'].forEach(id => { $(id).hidden = true; });
-    $('pip').hidden = true;
-    setHud('seek'); updateSeekHud();
-    Link.send('seek-start', { endsAt: Date.now() + SEEK_SECONDS * 1000 });
+  function startSeek(data, noTransition) {
+    const proceed = () => {
+      if (data) applyPayload(data);
+      phase = 'seek'; view = 'top';
+      seekTotal = SEEK_SECONDS; seekEndsAt = nowMs() + seekTotal * 1000; seekRemaining = seekTotal;
+      bombsTotal = BOMBS; bombsLeft = BOMBS; hidersCount = HIDERS; foundCount = 0;
+      clearBombs(); setShading(0);
+      painter.enabled = false; painter.cursor.visible = false; keys.clear();
+      floorMesh.visible = true; player.visible = true;
+      ['titleOverlay', 'waitOverlay', 'doneOverlay', 'resultOverlay'].forEach(id => { $(id).hidden = true; });
+      setResultFolded(false);
+      $('pip').hidden = true;
+      setHud('seek'); updateSeekHud();
+      Link.send('seek-start', { endsAt: Date.now() + SEEK_SECONDS * 1000 });
+    };
+    if (noTransition) proceed();
+    else playLiquidTransition('seek', proceed);
   }
   function updateSeekHud() {
     $('bombDots').innerHTML = Array.from({ length: bombsTotal }, (_, i) => `<i class="${i < bombsTotal - bombsLeft ? 'used' : ''}"></i>`).join('');
@@ -657,11 +796,13 @@
       const a = (i / 18) * Math.PI * 2 + Math.random() * 0.3, sp = R0 * (1.6 + Math.random() * 2.2);
       const bit = fxMesh(fxDisc, [0xffd166, 0xff8a1f, 0xe03a3a, 0x2b2d33][i % 4], 1, x, z, 25);
       const size = R0 * (0.1 + Math.random() * 0.08);
-      anims.push({ mesh: bit, t: 0, dur: 0.55 + Math.random() * 0.25, update: (k) => {
-        const e = 1 - (1 - k) * (1 - k);
-        bit.position.set(x + Math.cos(a) * sp * e, 0.3, z + Math.sin(a) * sp * e);
-        bit.scale.setScalar(size * (1 - 0.6 * k)); bit.material.opacity = 1 - k * k;
-      } });
+      anims.push({
+        mesh: bit, t: 0, dur: 0.55 + Math.random() * 0.25, update: (k) => {
+          const e = 1 - (1 - k) * (1 - k);
+          bit.position.set(x + Math.cos(a) * sp * e, 0.3, z + Math.sin(a) * sp * e);
+          bit.scale.setScalar(size * (1 - 0.6 * k)); bit.material.opacity = 1 - k * k;
+        }
+      });
     }
     // 煙（ゆっくり広がって薄れる）
     const smoke = fxMesh(fxDisc, 0x3a3c44, 0.45, x, z, 20);
@@ -762,32 +903,38 @@
     if (phase !== 'seek') return;
     phase = 'result'; aimRing.visible = false;
     const found = foundCount >= hidersCount;
-    showFound(); setShading(1);                 // 答え合わせ: 隠れ場所を光らせ、影・ツヤを付ける
     const used = bombsTotal - bombsLeft, t = Math.round(seekTotal - seekRemaining);
     $('resultTitle').textContent = found ? '見つけた！' : '逃げ切られた…';
     $('resultTitle').className = found ? 'win' : 'lose';
     $('resultMsg').textContent = found
       ? `${used} 発目で発見（${t} 秒）。黄色い輪が隠れていた場所です。`
       : (reason === 'timeout' ? '時間切れ。' : '爆弾を使い切りました。') + '黄色い輪が隠れていた場所です。';
-    showResultPanel();
     Link.send('result', { found, used, seconds: t, reason });
+    playLiquidTransition(found, () => {
+      showFound(); setShading(1);
+    }, () => {
+      showResultPanel();
+    });
   }
 
   // ----- タブ間の連携 -----
-  Link.on('hello-seeker', () => { if (net) return;             // 見つける人のタブが開いた
+  Link.on('hello-seeker', () => {
+    if (net) return;             // 見つける人のタブが開いた
     seekerSeen = true;
     if (phase === 'play') Link.send('prep', { endsAt: prepEndsAt, prepSeconds: PREP_SECONDS });
     else if (phase === 'done' && hiddenPayload) Link.send('hidden', hiddenPayload);
   });
   Link.on('prep', (m) => { if (net) return; if (phase === 'wait' && !seekLocal) { prepEndsAt = m.endsAt; updateWait(); } });
   Link.on('hidden', (m) => { if (net) return; if (phase === 'wait' && !seekLocal) startSeek(m); });
-  Link.on('seek-start', () => { if (net) return;               // 隠れる人のタブ: 見つける人のターンが始まった
+  Link.on('seek-start', () => {
+    if (net) return;               // 隠れる人のタブ: 見つける人のターンが始まった
     seekerSeen = true;
     if (phase !== 'done') return;
     enterSpectate(Date.now() + SEEK_SECONDS * 1000, SEEK_SECONDS, BOMBS, BOMBS, HIDERS);
   });
   Link.on('aim', (m) => { if (net) return; if (spectating) setRemoteAim(m.x, m.z); });
-  Link.on('bomb', (m) => { if (net) return;
+  Link.on('bomb', (m) => {
+    if (net) return;
     if (phase !== 'done') return;
     addBombMark(m.x, m.z, m.hit);
     bombsLeft = m.left; if (m.hit) foundCount++;
@@ -795,15 +942,21 @@
     if (m.hit) { showFound(); cutin('みつかってしまった…', 'lose'); }
     else toast(`はずれ！ 残り ${m.left} 発`);
   });
-  Link.on('result', (m) => { if (net) return;
+  Link.on('result', (m) => {
+    if (net) return;
     if (phase !== 'done') return;
-    showFound(); setShading(1); aimRing.visible = false; remoteAim = null;
+    phase = 'result';
+    aimRing.visible = false; remoteAim = null;
     $('resultTitle').textContent = m.found ? '見つかった…' : '逃げ切った！';
     $('resultTitle').className = m.found ? 'lose' : 'win';
     $('resultMsg').textContent = m.found ? `${m.used} 発目で見つかりました（${m.seconds} 秒）。` : '最後まで見つかりませんでした。';
     $('resultBackBtn').textContent = 'タイトルに戻る'; $('resultBackBtn').disabled = false;
     if (!m.found) cutin('逃げ切った！', 'win');
-    showResultPanel();
+    playLiquidTransition(!m.found, () => {
+      showFound(); setShading(1);
+    }, () => {
+      showResultPanel();
+    });
   });
 
   // 隠れる人の画面を、見つける人と同じ真上の固定視点に切り替える（操作はできない）
@@ -813,23 +966,30 @@
     bombsTotal = total; bombsLeft = left; hidersCount = hiders; foundCount = 0;
     painter.enabled = false; painter.cursor.visible = false; keys.clear();
     ['titleOverlay', 'waitOverlay', 'doneOverlay', 'resultOverlay', 'topBar'].forEach(id => { $(id).hidden = true; });
+    setResultFolded(false);
     $('pip').hidden = true; setHud('seek'); $('spectateChip').hidden = false;
     updateSeekHud();
   }
 
   // ----- タイトルに戻る -----
   function resetToTitle(opts) {
-    phase = 'title'; view = 'main'; seekLocal = false; hiddenPayload = null;
-    ['doneOverlay', 'waitOverlay', 'resultOverlay'].forEach(id => { $(id).hidden = true; });
-    $('titleOverlay').hidden = !!(opts && opts.keepHidden);
-    $('againBtn').hidden = false; clearRemotes(); spectating = false; remoteAim = null; $('cutin').hidden = true;
-    clearBombs(); setShading(0); player.visible = true; painter.reset();
-    stage.classList.remove('topview');
-    setHud('hider'); setMode('move');
-    // 見つける人として受け取った床は捨て、タイトルで選んでいる床に戻す
-    if (floorSource === 'img' && imageCanvas) applyFloorCanvas(imageCanvas);
-    else if (floorSource === 'gen') buildFloor(seed);
-    else floorMesh.visible = false;
+    opts = opts || {};
+    const proceed = () => {
+      phase = 'title'; view = 'main'; seekLocal = false; hiddenPayload = null;
+      ['doneOverlay', 'waitOverlay', 'resultOverlay'].forEach(id => { $(id).hidden = true; });
+      setResultFolded(false);
+      $('titleOverlay').hidden = !!opts.keepHidden;
+      $('againBtn').hidden = false; clearRemotes(); spectating = false; remoteAim = null; $('cutin').hidden = true;
+      clearBombs(); setShading(0); player.visible = true; painter.reset();
+      stage.classList.remove('topview');
+      setHud('hider'); setMode('move');
+      // 見つける人として受け取った床は捨て、タイトルで選んでいる床に戻す
+      if (floorSource === 'img' && imageCanvas) applyFloorCanvas(imageCanvas);
+      else if (floorSource === 'gen') buildFloor(seed);
+      else floorMesh.visible = false;
+    };
+    if (opts.noTransition) proceed();
+    else playLiquidTransition('backToTitle', proceed);
   }
 
   $('seekWaitBtn').addEventListener('click', enterWait);
@@ -837,6 +997,8 @@
   $('seekHereBtn').addEventListener('click', enterHandoff);
   $('handoffBtn').addEventListener('click', () => startSeek(null));
   $('resultBackBtn').addEventListener('click', () => { if (net) net.onResultBack(); else resetToTitle(); });
+  $('resultFoldBtn')?.addEventListener('click', () => setResultFolded(true));
+  $('resultExpandBtn')?.addEventListener('click', () => setResultFolded(false));
   const fmt = (sec) => { const s = Math.ceil(sec); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 
   // =====================================================================
@@ -921,15 +1083,19 @@
     },
     // 見つける人: 全員の隠れた結果を受け取って捜索開始
     startSeekOnline(o) {
-      phase = 'seek'; view = 'top'; spectating = !!o.spectator; remoteAim = null;
-      seekEndsAt = o.endsAt; seekTotal = o.seekSeconds; seekRemaining = seekTotal;
-      bombsTotal = o.bombsTotal; bombsLeft = o.bombsLeft; hidersCount = o.hiders.length; foundCount = 0; bombsDrawn = 0;
-      clearBombs(); clearRemotes(); setShading(0);
-      o.hiders.forEach(h => addRemote(h.id, h.img, h.x, h.z, h.heading));
-      painter.enabled = false; painter.cursor.visible = false; keys.clear();
-      floorMesh.visible = true; player.visible = false;
-      ['titleOverlay', 'waitOverlay', 'doneOverlay', 'resultOverlay'].forEach(id => { $(id).hidden = true; });
-      $('pip').hidden = true; setHud('seek'); $('spectateChip').hidden = !spectating; updateSeekHud();
+      const proceed = () => {
+        phase = 'seek'; view = 'top'; spectating = !!o.spectator; remoteAim = null;
+        seekEndsAt = o.endsAt; seekTotal = o.seekSeconds; seekRemaining = seekTotal;
+        bombsTotal = o.bombsTotal; bombsLeft = o.bombsLeft; hidersCount = o.hiders.length; foundCount = 0; bombsDrawn = 0;
+        clearBombs(); clearRemotes(); setShading(0);
+        o.hiders.forEach(h => addRemote(h.id, h.img, h.x, h.z, h.heading));
+        painter.enabled = false; painter.cursor.visible = false; keys.clear();
+        floorMesh.visible = true; player.visible = false;
+        ['titleOverlay', 'waitOverlay', 'doneOverlay', 'resultOverlay'].forEach(id => { $(id).hidden = true; });
+        setResultFolded(false);
+        $('pip').hidden = true; setHud('seek'); $('spectateChip').hidden = !spectating; updateSeekHud();
+      };
+      playLiquidTransition('seek', proceed);
     },
     setRemoteAim, cutin,
     // サーバーの状態（爆撃・発見）を画面に反映。隠れる人の画面でも使う
@@ -952,12 +1118,16 @@
     resetBombs() { clearBombs(); bombsDrawn = 0; },
     // 見つける人の結果表示
     showSeekResult(title, msg, win, backLabel, backEnabled) {
-      phase = 'result'; aimRing.visible = false; remoteAim = null; setShading(1);
-      remotes.forEach(r => { r.ring.visible = true; });
+      phase = 'result'; aimRing.visible = false; remoteAim = null;
       $('resultTitle').textContent = title; $('resultTitle').className = win ? 'win' : 'lose';
       $('resultMsg').textContent = msg;
       $('resultBackBtn').textContent = backLabel; $('resultBackBtn').disabled = !backEnabled;
-      showResultPanel();
+      playLiquidTransition(win, () => {
+        setShading(1);
+        remotes.forEach(r => { r.ring.visible = true; });
+      }, () => {
+        showResultPanel();
+      });
     },
     // 隠れる人の画面の文言
     showHiderStatus(title, msg) {
@@ -1021,7 +1191,8 @@
     const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
     const ev = (type, x, y, extra) => canvas.dispatchEvent(new PointerEvent(type, Object.assign({
       bubbles: true, cancelable: true, pointerId: 7, pointerType: 'mouse', isPrimary: true,
-      clientX: x, clientY: y, button: 0, buttons: 1 }, extra || {})));
+      clientX: x, clientY: y, button: 0, buttons: 1
+    }, extra || {})));
     ev('pointerdown', cx - 120, cy - 60);
     for (let i = 1; i <= 40; i++) ev('pointermove', cx - 120 + i * 6, cy - 60 + Math.sin(i / 4) * 40);
     ev('pointerup', cx + 120, cy - 60, { buttons: 0 });
@@ -1032,8 +1203,10 @@
 
   // 開発・自動テスト用の窓口（ゲーム内容には影響しない）
   window.kakurenbo = {
-    state: () => ({ phase, view, bombsLeft, foundCount, shading, x: player.position.x, z: player.position.z, heading, prepEndsAt,
-      spectating, aim: { visible: aimRing.visible, x: aimRing.position.x, z: aimRing.position.z }, cutin: $('cutin').hidden ? '' : $('cutinText').textContent }),
+    state: () => ({
+      phase, view, bombsLeft, foundCount, shading, x: player.position.x, z: player.position.z, heading, prepEndsAt,
+      spectating, aim: { visible: aimRing.visible, x: aimRing.position.x, z: aimRing.position.z }, cutin: $('cutin').hidden ? '' : $('cutinText').textContent
+    }),
     screenOf(x, z) {   // 床の座標 → 画面座標（見つける人の真上ビュー）
       const v = new THREE.Vector3(x, 0, z).project(topCam), r = canvas.getBoundingClientRect();
       return { x: r.left + (v.x + 1) / 2 * r.width, y: r.top + (1 - v.y) / 2 * r.height };
@@ -1050,6 +1223,9 @@
     requestAnimationFrame(loop);
     // 開発用: index.html#start / #start,paint / #start,top で画面を直接開く
     const flags = location.hash.slice(1).split(',');
+    if (!flags.some(f => ['start', 'seek', 'hotseat', 'imgtest'].includes(f))) {
+      playLiquidTransition('title'); // 初回/タイトル画面表示: ミント・ターコイズ
+    }
     if (flags.includes('start')) {
       if (!floorCanvas) setFloorSource('gen');   // 開発用フラグで直接始めるときは床を生成
       startRound();
