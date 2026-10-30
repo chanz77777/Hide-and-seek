@@ -1,4 +1,4 @@
-// お絵描きかくれんぼ — 隠れる人（ステップ 1）と見つける人（ステップ 2）
+﻿// お絵描きかくれんぼ — 隠れる人（ステップ 1）と見つける人（ステップ 2）
 // 床生成 (floor.js)・ペイント (paint.js)・タブ連携 (link.js) を組み合わせ、移動・カメラ・ミニマップ・タイマー・爆撃・画面遷移を担当する。
 (function () {
   'use strict';
@@ -223,7 +223,7 @@
   function startRound(opts) {
     opts = opts || {};
     const proceed = () => {
-      if (activeKoSeq) activeKoSeq = null;
+      koSeqs.length = 0;
       phase = 'play'; view = 'main';
       prepTotal = opts.prepSeconds || PREP_SECONDS; remaining = prepTotal;
       player.position.set(opts.x || 0, 0, opts.z || 0); heading = opts.heading || 0; player.rotation.set(0, heading, 0);
@@ -510,8 +510,12 @@
   let spectating = false;      // 隠れる人が見つける人と同じ画面を観ている
   let remoteAim = null;        // 観戦中に表示する見つける人の照準 { x, z, at }
   // カットイン演出（「〇〇をみつけた！」など）
-  let cutinTimer = 0;
+  let cutinTimer = 0, lastCutinText = '', lastCutinAt = 0;
   function cutin(text, kind) {
+    // 同じ文言が短時間に重ねて呼ばれても1回だけ出す（二重カットイン防止）
+    const nowT = performance.now();
+    if (text === lastCutinText && nowT - lastCutinAt < 1500) return;
+    lastCutinText = text; lastCutinAt = nowT;
     const el = $('cutin');
     $('cutinText').textContent = text;
     el.className = 'hud ' + (kind || 'win');
@@ -717,7 +721,7 @@
   // ----- 捜索（爆撃） -----
   function startSeek(data, noTransition) {
     const proceed = () => {
-      if (activeKoSeq) activeKoSeq = null;
+      koSeqs.length = 0;
       if (data) applyPayload(data);
       phase = 'seek'; view = 'top';
       seekTotal = SEEK_SECONDS; seekEndsAt = nowMs() + seekTotal * 1000; seekRemaining = seekTotal;
@@ -779,7 +783,7 @@
   function explode(x, z, hit) {
     const R0 = FX_SCALE;
     // KO演出中（ヒットストップ後の吹っ飛ばし中）は爆発エフェクトを最小限にする
-    const koActive = !!activeKoSeq;
+    const koActive = koSeqs.length > 0;
     // 火の玉（橙 → 赤 → 暗く、広がって消える）— KO中は小さく短く
     const fire = fxMesh(fxDisc, 0xff8a1f, koActive ? 0.5 : 0.95, x, z, 21);
     const fireSc = koActive ? 0.45 : 1.0;
@@ -824,7 +828,7 @@
     if (!koActive) { stage.classList.remove('shake'); void stage.offsetWidth; stage.classList.add('shake'); }
   }
   function clearBombs() {
-    if (activeKoSeq) activeKoSeq = null;
+    koSeqs.length = 0;
     if (typeof smashCv !== 'undefined') smashCv.style.display = 'none';
     topCam.position.set(0, 30, 0); topCam.zoom = 1.0; topCam.updateProjectionMatrix();
     bombs.forEach(b => scene.remove(b)); bombs.length = 0;
@@ -885,7 +889,7 @@
   const burstStarGeo = createCrossStarGeo(2.2, 0.22);
   const smallStarGeo = createCrossStarGeo(0.7, 0.09);
 
-  let activeKoSeq = null;
+  let koSeqs = [];   // 進行中の吹っ飛ばし演出（複数人ぶん）
 
   // 赤黒の雷撃を描く関数（再帰的ジグザグ生成）
   function drawLightning(ctx, x1, y1, x2, y2, displace) {
@@ -1061,7 +1065,9 @@
     });
   }
 
-  function playSmashKO(targetObj, hitPos, onFinish) {
+  // isFinal: 最後の一人を見つけたときだけ true（ズームアップ＋赤黒エフェクト＋ヒットストップ）
+  // それ以外のヒットは、吹っ飛び＋煙トレイルのみ
+  function playSmashKO(targetObj, hitPos, onFinish, isFinal = false) {
     if (!targetObj) { if (onFinish) onFinish(); return; }
 
     const startPos = targetObj.position.clone();
@@ -1073,44 +1079,48 @@
       dir.normalize();
     }
 
-    // 吹っ飛ばし速度: 従来の半分（約22 unit/s）にしてゆっくり回転しながら飛ぶ様子を見せる
+    // 吹っ飛ばし速度（約22 unit/s）。ゆっくり回転しながら飛ぶ様子を見せる
     const launchSpeed = 22.0;
     const launchVel = new THREE.Vector3(dir.x * launchSpeed, 0, dir.z * launchSpeed);
 
     setShading(1);
     showFound(startPos.x, startPos.z);
 
-    // 発見時のズームアップ（被弾マネキンに向かって2.5倍クローズアップ！）
-    topCam.position.set(startPos.x, 30, startPos.z);
-    topCam.zoom = 2.5;
-    topCam.updateProjectionMatrix();
-
-    // 赤黒の雷エフェクト Canvas を表示
-    smashCv.style.display = 'block';
+    if (isFinal) {
+      // 最後の一人: 被弾位置に向かって2.5倍ズームアップ（複数人同時ヒットでも同じ位置）
+      topCam.position.set(hitPos.x, 30, hitPos.z);
+      topCam.zoom = 2.5;
+      topCam.updateProjectionMatrix();
+      // 赤黒の雷エフェクト Canvas を表示
+      smashCv.style.display = 'block';
+    }
 
     let finished = false;
     const safeFinish = () => {
-      if (finished) return;
+      // リセット（clearBombs 等）で seq が破棄された後に古いタイマーが走っても何もしない
+      if (finished || !koSeqs.includes(seq)) return;
       finished = true;
-      smashCv.style.display = 'none';
-      // カメラを等倍・原点位置に完全復帰
-      topCam.position.set(0, 30, 0);
-      topCam.zoom = 1.0;
-      topCam.updateProjectionMatrix();
-      // リザルト画面でマネキンを元の位置・回転に戻して再表示！
+      if (isFinal) {
+        smashCv.style.display = 'none';
+        // カメラを等倍・原点位置に完全復帰
+        topCam.position.set(0, 30, 0);
+        topCam.zoom = 1.0;
+        topCam.updateProjectionMatrix();
+      }
+      // マネキンを元の位置・回転に戻して再表示
       targetObj.position.copy(startPos);
       targetObj.rotation.copy(origRot);
       targetObj.visible = true;
       setShading(1);
       showFound(startPos.x, startPos.z);
-      activeKoSeq = null;
+      koSeqs.splice(koSeqs.indexOf(seq), 1);
       if (onFinish) onFinish();
     };
 
-    // セーフガード: 万一何があっても確実に3.2秒以内にリザルトへ遷移
+    // セーフガード: 万一何があっても確実に3.2秒以内に完了
     setTimeout(safeFinish, 3200);
 
-    activeKoSeq = {
+    const seq = {
       target: targetObj,
       origPos: startPos.clone(),
       origRot: origRot.clone(),
@@ -1119,19 +1129,23 @@
       dir,
       hitPos,
       elapsed: 0,
-      hitStopDuration: 0.85, // スマブラ級のガッツリ0.85秒ヒットストップ！
+      hitStopDuration: isFinal ? 0.85 : 0, // ヒットストップは最後の一人だけ
+      isFinal,
       burstTriggered: false,
       burstTimer: 0,
       safeFinish
     };
+    koSeqs.push(seq);
   }
 
   function updateSmashKO(dt) {
-    if (!activeKoSeq) return;
-    const ko = activeKoSeq;
+    for (const ko of [...koSeqs]) stepKo(ko, dt);
+  }
+
+  function stepKo(ko, dt) {
     ko.elapsed += dt;
 
-    // 1. ヒットストップ中（0.0s〜0.85s）: ズームアップされたマネキン中心に赤黒雷撃＋被弾の身震い
+    // 1. ヒットストップ中（最後の一人のみ）: ズームされたマネキン中心に赤黒雷撃＋被弾の身震い
     if (ko.elapsed < ko.hitStopDuration) {
       const v = new THREE.Vector3(ko.hitPos.x, 0, ko.hitPos.z).project(topCam);
       const r = canvas.getBoundingClientRect();
@@ -1148,8 +1162,8 @@
       return;
     }
 
-    // ヒットストップ終了: 雷 Canvas を消し、カメラを元の等倍・全体表示に戻す！
-    if (smashCv.style.display !== 'none') {
+    // ヒットストップ終了: 雷 Canvas を消し、カメラを元の等倍・全体表示に戻す（最後の一人のみ）
+    if (ko.isFinal && smashCv.style.display !== 'none') {
       smashCv.style.display = 'none';
       topCam.position.set(0, 30, 0);
       topCam.zoom = 1.0;
@@ -1159,7 +1173,7 @@
 
     const actDt = Math.min(dt, 0.033);
 
-    // 2. 吹っ飛ばし移動（半分のスピードでゆっくり回転しながら飛ぶ）
+    // 2. 吹っ飛ばし移動（ゆっくり回転しながら飛ぶ）
     ko.pos.addScaledVector(ko.vel, actDt);
     ko.target.position.copy(ko.pos);
 
@@ -1167,7 +1181,7 @@
     ko.target.rotation.y += 18.0 * actDt;
     ko.target.rotation.z += 12.0 * actDt;
 
-    // 3. ランダムな煙トレイル（吹っ飛ばし中のみ。ヒットストップ終了後から出す）
+    // 3. ランダムな煙トレイル（全員共通。吹っ飛ばし中のみ）
     if (!ko.burstTriggered && ko.elapsed > ko.hitStopDuration + 0.1) {
       const puffCount = Math.random() < 0.6 ? 2 : 1;
       for (let s = 0; s < puffCount; s++) {
@@ -1183,7 +1197,7 @@
           t: 0,
           dur: 0.5 + Math.random() * 0.3,
           update: (k) => {
-            // 最初少し膨らんでから、徐々に小さく萎んで消える！
+            // 最初少し膨らんでから、徐々に小さく萎んで消える
             const grow = k < 0.15 ? (1 + 0.25 * (k / 0.15)) : 1.25;
             const shrink = Math.max(0.01, 1 - Math.pow(k, 0.75));
             trail.scale.setScalar(initSize * grow * shrink);
@@ -1202,11 +1216,11 @@
       ko.burstTriggered = true;
       ko.target.visible = false; // マネキン場外消滅
       triggerBurstFx(ko.pos.x, ko.pos.z);
-      // 被弾時の赤エフェクトと被らないよう、場外バーストの瞬間に「見つけた！」カットインを炸裂させる！
-      cutin('隠れる人をみつけた！', 'win');
+      // 「見つけた！」カットインは最後の一人・ローカル見つける側だけ（他は爆撃時に別途出している）
+      if (ko.isFinal && !net && !spectating) cutin('隠れる人をみつけた！', 'win');
     }
 
-    // 5. バースト後の完了＆リザルト画面移行
+    // 5. バースト後の完了＆次の画面へ
     if (ko.burstTriggered) {
       ko.burstTimer += actDt;
       if (ko.burstTimer >= 0.45) {
@@ -1258,21 +1272,23 @@
     bombsLeft--;
     const hit = hitTest(x, z);
     if (hit) foundCount++;
-    // KO演出を発火させるヒットは爆発エフェクトを完全スキップ（オレンジ円がマネキンを隠さないよう）
-    const isKoHit = hit && foundCount >= HIDERS;
+    // ヒットは全て吹っ飛び演出が出るので、爆発エフェクトを完全スキップ（オレンジ円がマネキンを隠さないよう）
+    const isKoHit = hit;
     addBombMark(x, z, hit, isKoHit /* skipExplode */);
     updateSeekHud();
     Link.send('bomb', { x, z, hit, left: bombsLeft });
     if (hit) {
-      if (isKoHit) {
-        // とどめのKO演出（カットインは場外バースト時に時間差で発火）
+      if (foundCount >= HIDERS) {
+        // 最後の一人: ズーム＋赤黒＋吹っ飛び（カットインは場外バースト時に時間差で発火）
         playSmashKO(player, { x, z }, () => {
           endSeek('found');
-        });
+        }, true);
         return;
       } else {
+        // 途中のヒット: 吹っ飛び＋煙トレイルのみ
         showFound(x, z);
         cutin('隠れる人をみつけた！', 'win');
+        playSmashKO(player, { x, z }, null, false);
       }
     } else {
       toast(bombsLeft > 0 ? `はずれ… 残り ${bombsLeft} 発` : 'はずれ… 爆弾がなくなりました');
@@ -1345,7 +1361,7 @@
     if (m.hit) {
       showFound();
       cutin('みつかってしまった…', 'lose');
-      playSmashKO(player, { x: m.x, z: m.z });
+      playSmashKO(player, { x: m.x, z: m.z }, null, foundCount >= HIDERS);
     }
     else toast(`はずれ！ 残り ${m.left} 発`);
   });
@@ -1387,7 +1403,7 @@
       setResultFolded(false);
       $('titleOverlay').hidden = !!opts.keepHidden;
       $('againBtn').hidden = false; clearRemotes(); spectating = false; remoteAim = null; $('cutin').hidden = true;
-      if (activeKoSeq) activeKoSeq = null;
+      koSeqs.length = 0;
       player.rotation.set(0, heading, 0); player.visible = true;
       clearBombs(); setShading(0); painter.reset();
       stage.classList.remove('topview');
@@ -1510,8 +1526,13 @@
     // サーバーの状態（爆撃・発見）を画面に反映。隠れる人の画面でも使う
     syncBombs(room, meId) {
       const list = room.bombs || [];
+      const totalHiders = (room.hiders || []).length;
+      // これまでに描画済みの爆弾で見つかった人数（最後の一人の判定用）
+      let foundSoFar = list.slice(0, bombsDrawn).reduce((n, bb) => n + (bb.hitIds || []).length, 0);
       for (; bombsDrawn < list.length; bombsDrawn++) {
         const b = list[bombsDrawn];
+        foundSoFar += (b.hitIds || []).length;
+        const isFinal = totalHiders > 0 && foundSoFar >= totalHiders;   // この爆弾で全員見つかった
         // KO演出を発火するヒットは爆発エフェクト完全スキップ
         const isKoHit = b.hit && (b.hitIds || []).length > 0;
         addBombMark(b.x, b.z, b.hit, isKoHit /* skipExplode */);
@@ -1523,8 +1544,8 @@
         else cutin(`${names}がみつかった！`, 'lose');
         (b.hitIds || []).forEach(hId => {
           const r = remotes.get(hId);
-          if (r) playSmashKO(r.holder, { x: b.x, z: b.z });
-          else if (hId === meId) playSmashKO(player, { x: b.x, z: b.z });
+          if (r) playSmashKO(r.holder, { x: b.x, z: b.z }, null, isFinal);
+          else if (hId === meId) playSmashKO(player, { x: b.x, z: b.z }, null, isFinal);
         });
       }
       bombsLeft = room.bombsLeft; bombsTotal = room.bombsTotal || bombsTotal;
@@ -1579,7 +1600,7 @@
   let last = performance.now();
   function loop(now) {
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
-    if (activeKoSeq) {
+    if (koSeqs.length) {
       updateSmashKO(dt);
     } else if (phase === 'play' && mode === 'move' && view === 'main') {
       let vx = 0, vz = 0;
