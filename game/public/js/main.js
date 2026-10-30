@@ -223,9 +223,10 @@
   function startRound(opts) {
     opts = opts || {};
     const proceed = () => {
+      if (activeKoSeq) activeKoSeq = null;
       phase = 'play'; view = 'main';
       prepTotal = opts.prepSeconds || PREP_SECONDS; remaining = prepTotal;
-      player.position.set(opts.x || 0, 0, opts.z || 0); heading = opts.heading || 0; player.rotation.y = heading;
+      player.position.set(opts.x || 0, 0, opts.z || 0); heading = opts.heading || 0; player.rotation.set(0, heading, 0);
       player.visible = true; clearRemotes(); spectating = false; remoteAim = null;
       painter.reset(); setShading(0);
       $('titleOverlay').hidden = true; $('doneOverlay').hidden = true; $('topBar').hidden = true;
@@ -716,6 +717,7 @@
   // ----- 捜索（爆撃） -----
   function startSeek(data, noTransition) {
     const proceed = () => {
+      if (activeKoSeq) activeKoSeq = null;
       if (data) applyPayload(data);
       phase = 'seek'; view = 'top';
       seekTotal = SEEK_SECONDS; seekEndsAt = nowMs() + seekTotal * 1000; seekRemaining = seekTotal;
@@ -753,7 +755,7 @@
   const markGeo = new THREE.CircleGeometry(BOMB_RADIUS, 48);
   const ringGeo = new THREE.RingGeometry(BOMB_RADIUS * 0.93, BOMB_RADIUS, 48);
   const crossGeo = new THREE.PlaneGeometry(BOMB_RADIUS * 0.9, BOMB_RADIUS * 0.12);
-  function addBombMark(x, z, hit) {
+  function addBombMark(x, z, hit, skipExplode) {
     const g = new THREE.Group(); g.position.set(x, 0.004, z); g.rotation.x = -Math.PI / 2;
     const col = hit ? 0xf2d64b : 0xe03a3a;
     g.add(new THREE.Mesh(markGeo, new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.28, depthWrite: false })));
@@ -763,7 +765,15 @@
       c.rotation.z = a; g.add(c);
     }
     g.renderOrder = 5; scene.add(g); bombs.push(g);
-    explode(x, z, hit);
+    if (!skipExplode) {
+      // KO演出中（ヒットストップ含む）なら爆発エフェクトをヒットストップ終了まで遅延させる
+      if (activeKoSeq) {
+        const delay = activeKoSeq.hitStopDuration - activeKoSeq.elapsed + 0.05;
+        setTimeout(() => explode(x, z, hit), Math.max(0, delay) * 1000);
+      } else {
+        explode(x, z, hit);
+      }
+    }
   }
 
   // 爆風の演出: 閃光 → 衝撃波の輪 2 重 → 飛び散る破片 → 煙、画面の揺れ。どこが爆撃されたか誰でも分かるように大きめに出す
@@ -776,41 +786,55 @@
   const FX_SCALE = 0.35;       // 演出の基準の大きさ（unit）。爆風の判定半径より大きく見せて、遠目でも分かるようにする
   function explode(x, z, hit) {
     const R0 = FX_SCALE;
-    // 火の玉（橙 → 赤 → 暗く、広がって消える）
-    const fire = fxMesh(fxDisc, 0xff8a1f, 0.95, x, z, 21);
-    anims.push({ mesh: fire, t: 0, dur: 0.8, update: (k) => { fire.scale.setScalar(R0 * (0.5 + 1.5 * Math.sqrt(k))); fire.material.opacity = 0.95 * (1 - k * k); fire.material.color.setHSL(0.1 - 0.1 * k, 1, 0.58 - 0.3 * k); } });
-    // 芯（黄色）
-    const core = fxMesh(fxDisc, 0xffe066, 1, x, z, 22);
-    anims.push({ mesh: core, t: 0, dur: 0.45, update: (k) => { core.scale.setScalar(R0 * (0.35 + 0.7 * Math.sqrt(k))); core.material.opacity = 1 - k; } });
-    // 閃光（ごく短い白）
-    const flash = fxMesh(fxDisc, 0xffffff, 1, x, z, 23);
-    anims.push({ mesh: flash, t: 0, dur: 0.16, update: (k) => { flash.scale.setScalar(R0 * (0.3 + 0.6 * k)); flash.material.opacity = 1 - k; } });
-    // 衝撃波（2 重の輪が爆風半径の 3 倍まで広がる）
-    [0, 0.12].forEach((delay) => {
-      const ring = fxMesh(fxRing, hit ? 0xf2d64b : 0xffffff, 0.9, x, z, 24);
-      ring.visible = false;
-      anims.push({ mesh: ring, t: -delay, dur: 0.8, update: (k) => { ring.visible = k >= 0; ring.scale.setScalar(R0 * (0.5 + 4.2 * Math.max(0, k))); ring.material.opacity = 0.9 * (1 - Math.max(0, k)); } });
-    });
-    // 破片（外向きに飛んで落ちる）
-    for (let i = 0; i < 18; i++) {
-      const a = (i / 18) * Math.PI * 2 + Math.random() * 0.3, sp = R0 * (1.6 + Math.random() * 2.2);
-      const bit = fxMesh(fxDisc, [0xffd166, 0xff8a1f, 0xe03a3a, 0x2b2d33][i % 4], 1, x, z, 25);
-      const size = R0 * (0.1 + Math.random() * 0.08);
-      anims.push({
-        mesh: bit, t: 0, dur: 0.55 + Math.random() * 0.25, update: (k) => {
-          const e = 1 - (1 - k) * (1 - k);
-          bit.position.set(x + Math.cos(a) * sp * e, 0.3, z + Math.sin(a) * sp * e);
-          bit.scale.setScalar(size * (1 - 0.6 * k)); bit.material.opacity = 1 - k * k;
-        }
-      });
+    // KO演出中（ヒットストップ後の吹っ飛ばし中）は爆発エフェクトを最小限にする
+    const koActive = !!activeKoSeq;
+    // 火の玉（橙 → 赤 → 暗く、広がって消える）— KO中は小さく短く
+    const fire = fxMesh(fxDisc, 0xff8a1f, koActive ? 0.5 : 0.95, x, z, 21);
+    const fireSc = koActive ? 0.45 : 1.0;
+    anims.push({ mesh: fire, t: 0, dur: koActive ? 0.4 : 0.8, update: (k) => { fire.scale.setScalar(R0 * fireSc * (0.5 + 1.5 * Math.sqrt(k))); fire.material.opacity = (koActive ? 0.5 : 0.95) * (1 - k * k); fire.material.color.setHSL(0.1 - 0.1 * k, 1, 0.58 - 0.3 * k); } });
+    if (!koActive) {
+      // 芯（黄色）— KO中は省略
+      const core = fxMesh(fxDisc, 0xffe066, 1, x, z, 22);
+      anims.push({ mesh: core, t: 0, dur: 0.45, update: (k) => { core.scale.setScalar(R0 * (0.35 + 0.7 * Math.sqrt(k))); core.material.opacity = 1 - k; } });
+      // 閃光（ごく短い白）— KO中は省略
+      const flash = fxMesh(fxDisc, 0xffffff, 1, x, z, 23);
+      anims.push({ mesh: flash, t: 0, dur: 0.16, update: (k) => { flash.scale.setScalar(R0 * (0.3 + 0.6 * k)); flash.material.opacity = 1 - k; } });
     }
-    // 煙（ゆっくり広がって薄れる）
-    const smoke = fxMesh(fxDisc, 0x3a3c44, 0.45, x, z, 20);
-    anims.push({ mesh: smoke, t: -0.15, dur: 1.6, update: (k) => { smoke.visible = k >= 0; smoke.scale.setScalar(R0 * (0.8 + 1.6 * Math.max(0, k))); smoke.material.opacity = 0.45 * (1 - Math.max(0, k)); } });
-    // 画面の揺れ
-    stage.classList.remove('shake'); void stage.offsetWidth; stage.classList.add('shake');
+    // 衝撃波（KO中は1重・小さめ）
+    const delays = koActive ? [0] : [0, 0.12];
+    delays.forEach((delay) => {
+      const ring = fxMesh(fxRing, hit ? 0xf2d64b : 0xffffff, koActive ? 0.5 : 0.9, x, z, 24);
+      ring.visible = false;
+      const rSc = koActive ? 2.5 : 4.2;
+      anims.push({ mesh: ring, t: -delay, dur: koActive ? 0.5 : 0.8, update: (k) => { ring.visible = k >= 0; ring.scale.setScalar(R0 * (0.5 + rSc * Math.max(0, k))); ring.material.opacity = (koActive ? 0.5 : 0.9) * (1 - Math.max(0, k)); } });
+    });
+    if (!koActive) {
+      // 破片（外向きに飛んで落ちる）— KO中は省略
+      for (let i = 0; i < 18; i++) {
+        const a = (i / 18) * Math.PI * 2 + Math.random() * 0.3, sp = R0 * (1.6 + Math.random() * 2.2);
+        const bit = fxMesh(fxDisc, [0xffd166, 0xff8a1f, 0xe03a3a, 0x2b2d33][i % 4], 1, x, z, 25);
+        const size = R0 * (0.1 + Math.random() * 0.08);
+        anims.push({
+          mesh: bit, t: 0, dur: 0.55 + Math.random() * 0.25, update: (k) => {
+            const e = 1 - (1 - k) * (1 - k);
+            bit.position.set(x + Math.cos(a) * sp * e, 0.3, z + Math.sin(a) * sp * e);
+            bit.scale.setScalar(size * (1 - 0.6 * k)); bit.material.opacity = 1 - k * k;
+          }
+        });
+      }
+    }
+    // 煙（ゆっくり広がって薄れる）— KO中は省略
+    if (!koActive) {
+      const smoke = fxMesh(fxDisc, 0x3a3c44, 0.45, x, z, 20);
+      anims.push({ mesh: smoke, t: -0.15, dur: 1.6, update: (k) => { smoke.visible = k >= 0; smoke.scale.setScalar(R0 * (0.8 + 1.6 * Math.max(0, k))); smoke.material.opacity = 0.45 * (1 - Math.max(0, k)); } });
+    }
+    // 画面の揺れ（KO中は省略）
+    if (!koActive) { stage.classList.remove('shake'); void stage.offsetWidth; stage.classList.add('shake'); }
   }
   function clearBombs() {
+    if (activeKoSeq) activeKoSeq = null;
+    if (typeof smashCv !== 'undefined') smashCv.style.display = 'none';
+    topCam.position.set(0, 30, 0); topCam.zoom = 1.0; topCam.updateProjectionMatrix();
     bombs.forEach(b => scene.remove(b)); bombs.length = 0;
     anims.forEach(a => scene.remove(a.mesh)); anims.length = 0;
     foundRing.visible = false; aimRing.visible = false;
@@ -822,7 +846,17 @@
       const a = anims[i]; a.t += dt;
       const k = Math.min(1, a.t / a.dur);
       a.update(k);
-      if (k >= 1) { scene.remove(a.mesh); a.mesh.material.dispose(); anims.splice(i, 1); }
+      if (k >= 1) {
+        scene.remove(a.mesh);
+        a.mesh.traverse((obj) => {
+          if (obj.geometry) obj.geometry.dispose();
+          if (obj.material) {
+            if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
+            else obj.material.dispose();
+          }
+        });
+        anims.splice(i, 1);
+      }
     }
     // 見つける人の照準（観戦中は相手の照準を滑らかに追う）
     if (spectating && remoteAim) {
@@ -833,12 +867,373 @@
     }
     if (foundRing.visible) { const p = 1 + 0.08 * Math.sin(performance.now() / 180); foundRing.scale.setScalar(p); }
   }
+
+  // =====================================================================
+  // スマブラ風 とどめの吹っ飛ばし演出（Smash KO Sequence）
+  // =====================================================================
+
+  // 赤黒の雷・集中線を描画する全画面オーバーレイ Canvas
+  const smashCv = document.createElement('canvas');
+  smashCv.id = 'smashCanvas';
+  smashCv.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:42;display:none;';
+  document.body.appendChild(smashCv);
+  const smashCtx = smashCv.getContext('2d');
+
+  // 画像2の「キラキラ十文字星（✨）」ジオメトリ
+  function createCrossStarGeo(radius, thickness) {
+    const shape = new THREE.Shape();
+    const r = radius, t = thickness;
+    shape.moveTo(0, r);
+    shape.quadraticCurveTo(0, t, t, 0);
+    shape.quadraticCurveTo(0, -t, 0, -r);
+    shape.quadraticCurveTo(-0, -t, -t, 0);
+    shape.quadraticCurveTo(-0, t, 0, r);
+    return new THREE.ShapeGeometry(shape);
+  }
+  const burstStarGeo = createCrossStarGeo(2.2, 0.22);
+  const smallStarGeo = createCrossStarGeo(0.7, 0.09);
+
+  let activeKoSeq = null;
+
+  // 赤黒の雷撃を描く関数（再帰的ジグザグ生成）
+  function drawLightning(ctx, x1, y1, x2, y2, displace) {
+    if (displace < 9) {
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.lineWidth = 7 + Math.random() * 4;
+      ctx.strokeStyle = '#ff1122';
+      ctx.stroke();
+      ctx.lineWidth = 2.2;
+      ctx.strokeStyle = '#fffce0';
+      ctx.stroke();
+      return;
+    }
+    const midX = (x1 + x2) / 2 + (Math.random() - 0.5) * displace;
+    const midY = (y1 + y2) / 2 + (Math.random() - 0.5) * displace;
+    drawLightning(ctx, x1, y1, midX, midY, displace / 2);
+    drawLightning(ctx, midX, midY, x2, y2, displace / 2);
+    if (Math.random() < 0.3) {
+      const bx = midX + (midX - x1) * 0.5 + (Math.random() - 0.5) * displace;
+      const by = midY + (midY - y1) * 0.5 + (Math.random() - 0.5) * displace;
+      drawLightning(ctx, midX, midY, bx, by, displace / 2);
+    }
+  }
+
+  // ヒットストップ中の赤黒雷エフェクトの描画（Canvas 2D）
+  function renderSmashLightning(cx, cy) {
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const w = window.innerWidth, h = window.innerHeight;
+    if (smashCv.width !== Math.floor(w * dpr) || smashCv.height !== Math.floor(h * dpr)) {
+      smashCv.width = Math.floor(w * dpr);
+      smashCv.height = Math.floor(h * dpr);
+    }
+    smashCtx.save();
+    smashCtx.scale(dpr, dpr);
+    smashCtx.clearRect(0, 0, w, h);
+
+    // 1. マネキンを丸く切り抜くための穴半径（ズームアップされたマネキンが綺麗に見えるサイズ）
+    const holeRadius = 120;
+    const maxR = Math.max(w, h) * 1.25;
+
+    // 2. 赤黒の放射状グラデーション背景（穴の外側から広がる）
+    const rad = smashCtx.createRadialGradient(cx, cy, holeRadius, cx, cy, maxR);
+    rad.addColorStop(0, 'rgba(220, 30, 20, 0.25)');
+    rad.addColorStop(0.2, 'rgba(160, 10, 15, 0.40)');
+    rad.addColorStop(0.65, 'rgba(50, 5, 10, 0.68)');
+    rad.addColorStop(1, 'rgba(15, 0, 5, 0.85)');
+    smashCtx.fillStyle = rad;
+    smashCtx.fillRect(0, 0, w, h);
+
+    // 3. 放射状の黒・赤集中線（穴の外側から外縁へ引くのでマネキンに一切被らない）
+    const spikes = 32;
+    for (let i = 0; i < spikes; i++) {
+      const a1 = (i / spikes) * Math.PI * 2 + (Math.random() - 0.5) * 0.05;
+      const a2 = a1 + (Math.PI * 2 / spikes) * (0.35 + Math.random() * 0.3);
+      smashCtx.fillStyle = i % 2 === 0 ? 'rgba(0, 0, 0, 0.55)' : 'rgba(230, 20, 30, 0.45)';
+      smashCtx.beginPath();
+      smashCtx.moveTo(cx + Math.cos(a1) * (holeRadius + 2), cy + Math.sin(a1) * (holeRadius + 2));
+      smashCtx.lineTo(cx + Math.cos(a1) * maxR, cy + Math.sin(a1) * maxR);
+      smashCtx.lineTo(cx + Math.cos(a2) * maxR, cy + Math.sin(a2) * maxR);
+      smashCtx.lineTo(cx + Math.cos(a2) * (holeRadius + 2), cy + Math.sin(a2) * (holeRadius + 2));
+      smashCtx.closePath();
+      smashCtx.fill();
+    }
+
+    // 4. バチバチ走る赤黒の雷撃（穴の外周から外側へ走る）
+    const boltCount = 7;
+    for (let i = 0; i < boltCount; i++) {
+      const angle = (i / boltCount) * Math.PI * 2 + (Math.random() - 0.5) * 0.4;
+      const sx = cx + Math.cos(angle) * holeRadius;
+      const sy = cy + Math.sin(angle) * holeRadius;
+      const dist = maxR * (0.55 + Math.random() * 0.45);
+      drawLightning(smashCtx, sx, sy, cx + Math.cos(angle) * dist, cy + Math.sin(angle) * dist, dist * 0.35);
+    }
+
+    // 5. 中心の完全なくり抜き（destination-out でマネキンを100%クリアに露出）
+    smashCtx.save();
+    smashCtx.globalCompositeOperation = 'destination-out';
+    smashCtx.beginPath();
+    smashCtx.arc(cx, cy, holeRadius, 0, Math.PI * 2);
+    smashCtx.fill();
+    smashCtx.restore();
+
+    // 6. 穴の境界のシャープな衝撃リング（赤〜白のリムライト）
+    smashCtx.beginPath();
+    smashCtx.arc(cx, cy, holeRadius, 0, Math.PI * 2);
+    smashCtx.lineWidth = 3;
+    smashCtx.strokeStyle = 'rgba(255, 60, 60, 0.75)';
+    smashCtx.stroke();
+
+    smashCtx.beginPath();
+    smashCtx.arc(cx, cy, holeRadius - 1.5, 0, Math.PI * 2);
+    smashCtx.lineWidth = 1.5;
+    smashCtx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+    smashCtx.stroke();
+
+    smashCtx.restore();
+  }
+
+  // 画面端の場外バースト演出（画像2の右上の✨キラキラ十文字星）
+  function triggerBurstFx(burstX, burstZ) {
+    const burstGroup = new THREE.Group();
+    burstGroup.position.set(burstX, 0.5, burstZ);
+    burstGroup.rotation.x = -Math.PI / 2;
+    scene.add(burstGroup);
+
+    // メインの巨大な十文字キラキラ星（画像2）
+    const mainMat = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 1,
+      depthTest: false,
+      side: THREE.DoubleSide
+    });
+    const mainStar = new THREE.Mesh(burstStarGeo, mainMat);
+    mainStar.scale.setScalar(2.2);
+    burstGroup.add(mainStar);
+
+    // 外側のシアン/マゼンタグロー星
+    const glowMat = new THREE.MeshBasicMaterial({
+      color: 0x00e5ff,
+      transparent: true,
+      opacity: 0.85,
+      depthTest: false,
+      side: THREE.DoubleSide
+    });
+    const glowStar = new THREE.Mesh(burstStarGeo, glowMat);
+    glowStar.scale.setScalar(2.6);
+    burstGroup.add(glowStar);
+
+    // 飛び散る小さなキラキラ星（✨）たち
+    const miniStars = [];
+    for (let i = 0; i < 14; i++) {
+      const col = [0xffffff, 0x00e5ff, 0xff4081, 0xffeb3b][i % 4];
+      const m = new THREE.Mesh(smallStarGeo, new THREE.MeshBasicMaterial({
+        color: col, transparent: true, opacity: 1, depthTest: false, side: THREE.DoubleSide
+      }));
+      burstGroup.add(m);
+      const angle = Math.random() * Math.PI * 2;
+      const spd = 4.0 + Math.random() * 6.0;
+      miniStars.push({
+        mesh: m,
+        vx: Math.cos(angle) * spd,
+        vy: Math.sin(angle) * spd,
+        rotSpd: (Math.random() - 0.5) * 20
+      });
+    }
+
+    stage.classList.remove('shake'); void stage.offsetWidth; stage.classList.add('shake');
+
+    anims.push({
+      mesh: burstGroup,
+      t: 0,
+      dur: 0.8,
+      update: (k) => {
+        const sc = 2.2 * (1 + 1.2 * Math.sin(k * Math.PI / 2));
+        mainStar.scale.setScalar(sc);
+        mainStar.rotation.z += 0.05;
+        mainStar.material.opacity = Math.max(0, 1 - k * 1.2);
+
+        glowStar.scale.setScalar(sc * 1.25);
+        glowStar.rotation.z -= 0.04;
+        glowStar.material.opacity = Math.max(0, (1 - k) * 0.85);
+
+        miniStars.forEach(s => {
+          s.mesh.position.x += s.vx * 0.016;
+          s.mesh.position.y += s.vy * 0.016;
+          s.mesh.rotation.z += s.rotSpd * 0.016;
+          s.mesh.material.opacity = Math.max(0, 1 - k);
+        });
+      }
+    });
+  }
+
+  function playSmashKO(targetObj, hitPos, onFinish) {
+    if (!targetObj) { if (onFinish) onFinish(); return; }
+
+    const startPos = targetObj.position.clone();
+    const origRot = targetObj.rotation.clone();
+    let dir = new THREE.Vector3(startPos.x - hitPos.x, 0, startPos.z - hitPos.z);
+    if (dir.lengthSq() < 0.0001) {
+      dir.set(0, 0, -1);
+    } else {
+      dir.normalize();
+    }
+
+    // 吹っ飛ばし速度: 従来の半分（約22 unit/s）にしてゆっくり回転しながら飛ぶ様子を見せる
+    const launchSpeed = 22.0;
+    const launchVel = new THREE.Vector3(dir.x * launchSpeed, 0, dir.z * launchSpeed);
+
+    setShading(1);
+    showFound(startPos.x, startPos.z);
+
+    // 発見時のズームアップ（被弾マネキンに向かって2.5倍クローズアップ！）
+    topCam.position.set(startPos.x, 30, startPos.z);
+    topCam.zoom = 2.5;
+    topCam.updateProjectionMatrix();
+
+    // 赤黒の雷エフェクト Canvas を表示
+    smashCv.style.display = 'block';
+
+    let finished = false;
+    const safeFinish = () => {
+      if (finished) return;
+      finished = true;
+      smashCv.style.display = 'none';
+      // カメラを等倍・原点位置に完全復帰
+      topCam.position.set(0, 30, 0);
+      topCam.zoom = 1.0;
+      topCam.updateProjectionMatrix();
+      // リザルト画面でマネキンを元の位置・回転に戻して再表示！
+      targetObj.position.copy(startPos);
+      targetObj.rotation.copy(origRot);
+      targetObj.visible = true;
+      setShading(1);
+      showFound(startPos.x, startPos.z);
+      activeKoSeq = null;
+      if (onFinish) onFinish();
+    };
+
+    // セーフガード: 万一何があっても確実に3.2秒以内にリザルトへ遷移
+    setTimeout(safeFinish, 3200);
+
+    activeKoSeq = {
+      target: targetObj,
+      origPos: startPos.clone(),
+      origRot: origRot.clone(),
+      pos: startPos.clone(),
+      vel: launchVel,
+      dir,
+      hitPos,
+      elapsed: 0,
+      hitStopDuration: 0.85, // スマブラ級のガッツリ0.85秒ヒットストップ！
+      burstTriggered: false,
+      burstTimer: 0,
+      safeFinish
+    };
+  }
+
+  function updateSmashKO(dt) {
+    if (!activeKoSeq) return;
+    const ko = activeKoSeq;
+    ko.elapsed += dt;
+
+    // 1. ヒットストップ中（0.0s〜0.85s）: ズームアップされたマネキン中心に赤黒雷撃＋被弾の身震い
+    if (ko.elapsed < ko.hitStopDuration) {
+      const v = new THREE.Vector3(ko.hitPos.x, 0, ko.hitPos.z).project(topCam);
+      const r = canvas.getBoundingClientRect();
+      const cx = r.left + (v.x + 1) / 2 * r.width;
+      const cy = r.top + (1 - v.y) / 2 * r.height;
+
+      renderSmashLightning(cx, cy);
+
+      ko.target.position.set(
+        ko.origPos.x + (Math.random() - 0.5) * 0.12,
+        ko.origPos.y,
+        ko.origPos.z + (Math.random() - 0.5) * 0.12
+      );
+      return;
+    }
+
+    // ヒットストップ終了: 雷 Canvas を消し、カメラを元の等倍・全体表示に戻す！
+    if (smashCv.style.display !== 'none') {
+      smashCv.style.display = 'none';
+      topCam.position.set(0, 30, 0);
+      topCam.zoom = 1.0;
+      topCam.updateProjectionMatrix();
+      stage.classList.remove('shake'); void stage.offsetWidth; stage.classList.add('shake');
+    }
+
+    const actDt = Math.min(dt, 0.033);
+
+    // 2. 吹っ飛ばし移動（半分のスピードでゆっくり回転しながら飛ぶ）
+    ko.pos.addScaledVector(ko.vel, actDt);
+    ko.target.position.copy(ko.pos);
+
+    // マネキン適度なスピン
+    ko.target.rotation.y += 18.0 * actDt;
+    ko.target.rotation.z += 12.0 * actDt;
+
+    // 3. ランダムな煙トレイル（吹っ飛ばし中のみ。ヒットストップ終了後から出す）
+    if (!ko.burstTriggered && ko.elapsed > ko.hitStopDuration + 0.1) {
+      const puffCount = Math.random() < 0.6 ? 2 : 1;
+      for (let s = 0; s < puffCount; s++) {
+        const ox = (Math.random() - 0.5) * 0.35;
+        const oz = (Math.random() - 0.5) * 0.35;
+        const initSize = 0.22 + Math.random() * 0.38; // 大小ランダムなサイズ
+        const initOpacity = 0.55 + Math.random() * 0.35;
+        const col = [0xffffff, 0xcffafe, 0xe2e8f0, 0xfbcfe8][Math.floor(Math.random() * 4)];
+        const trail = fxMesh(fxDisc, col, initOpacity, ko.pos.x + ox, ko.pos.z + oz, 26);
+        trail.position.y = 0.05;
+        anims.push({
+          mesh: trail,
+          t: 0,
+          dur: 0.5 + Math.random() * 0.3,
+          update: (k) => {
+            // 最初少し膨らんでから、徐々に小さく萎んで消える！
+            const grow = k < 0.15 ? (1 + 0.25 * (k / 0.15)) : 1.25;
+            const shrink = Math.max(0.01, 1 - Math.pow(k, 0.75));
+            trail.scale.setScalar(initSize * grow * shrink);
+            trail.material.opacity = initOpacity * (1 - k);
+          }
+        });
+      }
+    }
+
+    // 4. 場外（バーストライン）到達判定
+    const boundW = WORLD_W / 2 + 0.8;
+    const boundH = WORLD_H / 2 + 0.8;
+    const isOut = Math.abs(ko.pos.x) >= boundW || Math.abs(ko.pos.z) >= boundH;
+
+    if (isOut && !ko.burstTriggered) {
+      ko.burstTriggered = true;
+      ko.target.visible = false; // マネキン場外消滅
+      triggerBurstFx(ko.pos.x, ko.pos.z);
+      // 被弾時の赤エフェクトと被らないよう、場外バーストの瞬間に「見つけた！」カットインを炸裂させる！
+      cutin('隠れる人をみつけた！', 'win');
+    }
+
+    // 5. バースト後の完了＆リザルト画面移行
+    if (ko.burstTriggered) {
+      ko.burstTimer += actDt;
+      if (ko.burstTimer >= 0.45) {
+        ko.safeFinish();
+      }
+    }
+  }
+
   // 発見時に人を囲む輪 / 狙いの輪
   const foundRing = new THREE.Mesh(new THREE.RingGeometry(0.42, 0.48, 64), new THREE.MeshBasicMaterial({ color: 0xf2d64b, depthTest: false, transparent: true }));
   foundRing.rotation.x = -Math.PI / 2; foundRing.renderOrder = 30; foundRing.visible = false; scene.add(foundRing);
   const aimRing = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.95, depthTest: false }));
   aimRing.rotation.x = -Math.PI / 2; aimRing.renderOrder = 25; aimRing.visible = false; scene.add(aimRing);
-  function showFound() { foundRing.position.set(player.position.x, 0.01, player.position.z); foundRing.visible = true; }
+  function showFound(x, z) {
+    const px = typeof x === 'number' ? x : player.position.x;
+    const pz = typeof z === 'number' ? z : player.position.z;
+    foundRing.position.set(px, 0.01, pz);
+    foundRing.visible = true;
+  }
 
   // 命中判定: 真上から見た体（全頂点）が爆風の円に入っているか
   const tv = new THREE.Vector3();
@@ -874,8 +1269,20 @@
     addBombMark(x, z, hit);
     updateSeekHud();
     Link.send('bomb', { x, z, hit, left: bombsLeft });
-    if (hit) { showFound(); cutin('隠れる人をみつけた！', 'win'); }
-    else toast(bombsLeft > 0 ? `はずれ… 残り ${bombsLeft} 発` : 'はずれ… 爆弾がなくなりました');
+    if (hit) {
+      if (foundCount >= HIDERS) {
+        // とどめのKO演出（カットインは場外バースト時に時間差で発火）
+        playSmashKO(player, { x, z }, () => {
+          endSeek('found');
+        });
+        return;
+      } else {
+        showFound(x, z);
+        cutin('隠れる人をみつけた！', 'win');
+      }
+    } else {
+      toast(bombsLeft > 0 ? `はずれ… 残り ${bombsLeft} 発` : 'はずれ… 爆弾がなくなりました');
+    }
     if (foundCount >= HIDERS) endSeek('found');
     else if (bombsLeft <= 0) endSeek('nobombs');
   }
@@ -939,7 +1346,11 @@
     addBombMark(m.x, m.z, m.hit);
     bombsLeft = m.left; if (m.hit) foundCount++;
     if (spectating) updateSeekHud();
-    if (m.hit) { showFound(); cutin('みつかってしまった…', 'lose'); }
+    if (m.hit) {
+      showFound();
+      cutin('みつかってしまった…', 'lose');
+      playSmashKO(player, { x: m.x, z: m.z });
+    }
     else toast(`はずれ！ 残り ${m.left} 発`);
   });
   Link.on('result', (m) => {
@@ -980,7 +1391,9 @@
       setResultFolded(false);
       $('titleOverlay').hidden = !!opts.keepHidden;
       $('againBtn').hidden = false; clearRemotes(); spectating = false; remoteAim = null; $('cutin').hidden = true;
-      clearBombs(); setShading(0); player.visible = true; painter.reset();
+      if (activeKoSeq) activeKoSeq = null;
+      player.rotation.set(0, heading, 0); player.visible = true;
+      clearBombs(); setShading(0); painter.reset();
       stage.classList.remove('topview');
       setHud('hider'); setMode('move');
       // 見つける人として受け取った床は捨て、タイトルで選んでいる床に戻す
@@ -1109,6 +1522,11 @@
         if (!spectating) cutin(`${names}をみつけた！`, 'win');
         else if ((b.hitIds || []).includes(meId)) cutin('みつかってしまった…', 'lose');
         else cutin(`${names}がみつかった！`, 'lose');
+        (b.hitIds || []).forEach(hId => {
+          const r = remotes.get(hId);
+          if (r) playSmashKO(r.holder, { x: b.x, z: b.z });
+          else if (hId === meId) playSmashKO(player, { x: b.x, z: b.z });
+        });
       }
       bombsLeft = room.bombsLeft; bombsTotal = room.bombsTotal || bombsTotal;
       foundCount = (room.hiders || []).filter(h => h.found).length;
@@ -1162,7 +1580,9 @@
   let last = performance.now();
   function loop(now) {
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
-    if (phase === 'play' && mode === 'move' && view === 'main') {
+    if (activeKoSeq) {
+      updateSmashKO(dt);
+    } else if (phase === 'play' && mode === 'move' && view === 'main') {
       let vx = 0, vz = 0;
       if (keys.has('w') || keys.has('arrowup')) vz -= 1;
       if (keys.has('s') || keys.has('arrowdown')) vz += 1;
