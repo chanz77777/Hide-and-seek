@@ -765,15 +765,7 @@
       c.rotation.z = a; g.add(c);
     }
     g.renderOrder = 5; scene.add(g); bombs.push(g);
-    if (!skipExplode) {
-      // KO演出中（ヒットストップ含む）なら爆発エフェクトをヒットストップ終了まで遅延させる
-      if (activeKoSeq) {
-        const delay = activeKoSeq.hitStopDuration - activeKoSeq.elapsed + 0.05;
-        setTimeout(() => explode(x, z, hit), Math.max(0, delay) * 1000);
-      } else {
-        explode(x, z, hit);
-      }
-    }
+    if (!skipExplode) explode(x, z, hit);
   }
 
   // 爆風の演出: 閃光 → 衝撃波の輪 2 重 → 飛び散る破片 → 煙、画面の揺れ。どこが爆撃されたか誰でも分かるように大きめに出す
@@ -1266,11 +1258,13 @@
     bombsLeft--;
     const hit = hitTest(x, z);
     if (hit) foundCount++;
-    addBombMark(x, z, hit);
+    // KO演出を発火させるヒットは爆発エフェクトを完全スキップ（オレンジ円がマネキンを隠さないよう）
+    const isKoHit = hit && foundCount >= HIDERS;
+    addBombMark(x, z, hit, isKoHit /* skipExplode */);
     updateSeekHud();
     Link.send('bomb', { x, z, hit, left: bombsLeft });
     if (hit) {
-      if (foundCount >= HIDERS) {
+      if (isKoHit) {
         // とどめのKO演出（カットインは場外バースト時に時間差で発火）
         playSmashKO(player, { x, z }, () => {
           endSeek('found');
@@ -1343,8 +1337,10 @@
   Link.on('bomb', (m) => {
     if (net) return;
     if (phase !== 'done') return;
-    addBombMark(m.x, m.z, m.hit);
     bombsLeft = m.left; if (m.hit) foundCount++;
+    // KO演出を発火させるヒットは爆発エフェクト完全スキップ
+    const isKoHit = m.hit;
+    addBombMark(m.x, m.z, m.hit, isKoHit /* skipExplode */);
     if (spectating) updateSeekHud();
     if (m.hit) {
       showFound();
@@ -1515,7 +1511,10 @@
     syncBombs(room, meId) {
       const list = room.bombs || [];
       for (; bombsDrawn < list.length; bombsDrawn++) {
-        const b = list[bombsDrawn]; addBombMark(b.x, b.z, b.hit);
+        const b = list[bombsDrawn];
+        // KO演出を発火するヒットは爆発エフェクト完全スキップ
+        const isKoHit = b.hit && (b.hitIds || []).length > 0;
+        addBombMark(b.x, b.z, b.hit, isKoHit /* skipExplode */);
         if (phase !== 'seek') continue;
         if (!b.hit) { toast(room.bombsLeft > 0 ? `はずれ… 残り ${room.bombsLeft} 発` : 'はずれ… 爆弾がなくなりました'); continue; }
         const names = (room.hiders || []).filter(h => (b.hitIds || []).includes(h.id)).map(h => h.name).join('・');
