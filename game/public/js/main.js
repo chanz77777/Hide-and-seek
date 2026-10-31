@@ -223,7 +223,7 @@
   function startRound(opts) {
     opts = opts || {};
     const proceed = () => {
-      koSeqs.length = 0;
+      koSeqs.length = 0; pendingCutin = null;
       phase = 'play'; view = 'main';
       prepTotal = opts.prepSeconds || PREP_SECONDS; remaining = prepTotal;
       player.position.set(opts.x || 0, 0, opts.z || 0); heading = opts.heading || 0; player.rotation.set(0, heading, 0);
@@ -510,8 +510,19 @@
   let spectating = false;      // 隠れる人が見つける人と同じ画面を観ている
   let remoteAim = null;        // 観戦中に表示する見つける人の照準 { x, z, at }
   // カットイン演出（「〇〇をみつけた！」など）
+  let koSeqs = [];   // 進行中の吹っ飛ばし演出（複数人ぶん）
+  let pendingCutin = null;            // フィニッシュ演出中に保留しているカットイン
+  const FINISH_HOLD = 1.6;            // フィニッシュ: 場外バースト後、リザルトへ移るまでの余韻（秒）
+  const finishFxActive = () => koSeqs.some(k => k.isFinal);
   let cutinTimer = 0, lastCutinText = '', lastCutinAt = 0;
-  function cutin(text, kind) {
+  function flushPendingCutin() {
+    if (!pendingCutin) return;
+    const p = pendingCutin; pendingCutin = null;
+    cutin(p.text, p.kind, true);
+  }
+  function cutin(text, kind, force) {
+    // 最後の一人のフィニッシュ演出（ズーム＋赤黒＋吹っ飛び）が場外に出るまでは、カットインを保留する
+    if (!force && koSeqs.some(k => k.isFinal && !k.burstTriggered)) { pendingCutin = { text, kind }; return; }
     // 同じ文言が短時間に重ねて呼ばれても1回だけ出す（二重カットイン防止）
     const nowT = performance.now();
     if (text === lastCutinText && nowT - lastCutinAt < 1500) return;
@@ -542,6 +553,15 @@
 
   // リキッドトランジション演出（画面全体を有機的な液体の波が覆い、ステージや場面を切り替える）
   function playLiquidTransition(themeOrWin, onCover, onComplete, opts) {
+    // 結果へ移る遷移（true/false）は、フィニッシュ演出とカットインが終わるまで待つ
+    if (typeof themeOrWin === 'boolean' && finishFxActive()) {
+      const w = setInterval(() => {
+        if (finishFxActive()) return;
+        clearInterval(w);
+        playLiquidTransition(themeOrWin, onCover, onComplete, opts);
+      }, 50);
+      return;
+    }
     const cv = $('liquidCanvas');
     if (!cv) {
       if (onCover) onCover();
@@ -721,7 +741,7 @@
   // ----- 捜索（爆撃） -----
   function startSeek(data, noTransition) {
     const proceed = () => {
-      koSeqs.length = 0;
+      koSeqs.length = 0; pendingCutin = null;
       if (data) applyPayload(data);
       phase = 'seek'; view = 'top';
       seekTotal = SEEK_SECONDS; seekEndsAt = nowMs() + seekTotal * 1000; seekRemaining = seekTotal;
@@ -828,7 +848,7 @@
     if (!koActive) { stage.classList.remove('shake'); void stage.offsetWidth; stage.classList.add('shake'); }
   }
   function clearBombs() {
-    koSeqs.length = 0;
+    koSeqs.length = 0; pendingCutin = null;
     if (typeof smashCv !== 'undefined') smashCv.style.display = 'none';
     topCam.position.set(0, 30, 0); topCam.zoom = 1.0; topCam.updateProjectionMatrix();
     bombs.forEach(b => scene.remove(b)); bombs.length = 0;
@@ -889,7 +909,6 @@
   const burstStarGeo = createCrossStarGeo(2.2, 0.22);
   const smallStarGeo = createCrossStarGeo(0.7, 0.09);
 
-  let koSeqs = [];   // 進行中の吹っ飛ばし演出（複数人ぶん）
 
   // 赤黒の雷撃を描く関数（再帰的ジグザグ生成）
   function drawLightning(ctx, x1, y1, x2, y2, displace) {
@@ -1114,11 +1133,12 @@
       setShading(1);
       showFound(startPos.x, startPos.z);
       koSeqs.splice(koSeqs.indexOf(seq), 1);
+      if (isFinal) flushPendingCutin();   // 万一バーストを通らなかった場合の保険
       if (onFinish) onFinish();
     };
 
     // セーフガード: 万一何があっても確実に3.2秒以内に完了
-    setTimeout(safeFinish, 3200);
+    setTimeout(safeFinish, isFinal ? 6000 : 3200);
 
     const seq = {
       target: targetObj,
@@ -1216,14 +1236,17 @@
       ko.burstTriggered = true;
       ko.target.visible = false; // マネキン場外消滅
       triggerBurstFx(ko.pos.x, ko.pos.z);
-      // 「見つけた！」カットインは最後の一人・ローカル見つける側だけ（他は爆撃時に別途出している）
-      if (ko.isFinal && !net && !spectating) cutin('隠れる人をみつけた！', 'win');
+      // 「見つけた！」カットインはフィニッシュ（最後の一人）のバースト時に出す。途中のヒットは爆撃時に出している
+      if (ko.isFinal) {
+        if (pendingCutin) flushPendingCutin();
+        else if (!net && !spectating) cutin('隠れる人をみつけた！', 'win', true);
+      }
     }
 
     // 5. バースト後の完了＆次の画面へ
     if (ko.burstTriggered) {
       ko.burstTimer += actDt;
-      if (ko.burstTimer >= 0.45) {
+      if (ko.burstTimer >= (ko.isFinal ? FINISH_HOLD : 0.45)) {
         ko.safeFinish();
       }
     }
@@ -1360,8 +1383,8 @@
     if (spectating) updateSeekHud();
     if (m.hit) {
       showFound();
-      cutin('みつかってしまった…', 'lose');
       playSmashKO(player, { x: m.x, z: m.z }, null, foundCount >= HIDERS);
+      cutin('みつかってしまった…', 'lose');   // 最後の一人のときはバースト時まで保留される
     }
     else toast(`はずれ！ 残り ${m.left} 発`);
   });
@@ -1403,7 +1426,7 @@
       setResultFolded(false);
       $('titleOverlay').hidden = !!opts.keepHidden;
       $('againBtn').hidden = false; clearRemotes(); spectating = false; remoteAim = null; $('cutin').hidden = true;
-      koSeqs.length = 0;
+      koSeqs.length = 0; pendingCutin = null;
       player.rotation.set(0, heading, 0); player.visible = true;
       clearBombs(); setShading(0); painter.reset();
       stage.classList.remove('topview');
@@ -1539,14 +1562,15 @@
         if (phase !== 'seek') continue;
         if (!b.hit) { toast(room.bombsLeft > 0 ? `はずれ… 残り ${room.bombsLeft} 発` : 'はずれ… 爆弾がなくなりました'); continue; }
         const names = (room.hiders || []).filter(h => (b.hitIds || []).includes(h.id)).map(h => h.name).join('・');
-        if (!spectating) cutin(`${names}をみつけた！`, 'win');
-        else if ((b.hitIds || []).includes(meId)) cutin('みつかってしまった…', 'lose');
-        else cutin(`${names}がみつかった！`, 'lose');
         (b.hitIds || []).forEach(hId => {
           const r = remotes.get(hId);
           if (r) playSmashKO(r.holder, { x: b.x, z: b.z }, null, isFinal);
           else if (hId === meId) playSmashKO(player, { x: b.x, z: b.z }, null, isFinal);
         });
+        // カットインは KO 登録の後で出す（最後の一人のときはバースト時まで自動で保留される）
+        if (!spectating) cutin(`${names}をみつけた！`, 'win');
+        else if ((b.hitIds || []).includes(meId)) cutin('みつかってしまった…', 'lose');
+        else cutin(`${names}がみつかった！`, 'lose');
       }
       bombsLeft = room.bombsLeft; bombsTotal = room.bombsTotal || bombsTotal;
       foundCount = (room.hiders || []).filter(h => h.found).length;
