@@ -802,8 +802,8 @@
   const FX_SCALE = 0.35;       // 演出の基準の大きさ（unit）。爆風の判定半径より大きく見せて、遠目でも分かるようにする
   function explode(x, z, hit) {
     const R0 = FX_SCALE;
-    // KO演出中（ヒットストップ後の吹っ飛ばし中）は爆発エフェクトを最小限にする
-    const koActive = koSeqs.length > 0;
+    // 最後の一人のフィニッシュ演出中は、他の爆発エフェクトを最小限にする
+    const koActive = finishFxActive();
     // 火の玉（橙 → 赤 → 暗く、広がって消える）— KO中は小さく短く
     const fire = fxMesh(fxDisc, 0xff8a1f, koActive ? 0.5 : 0.95, x, z, 21);
     const fireSc = koActive ? 0.45 : 1.0;
@@ -1295,8 +1295,9 @@
     bombsLeft--;
     const hit = hitTest(x, z);
     if (hit) foundCount++;
-    // ヒットは全て吹っ飛び演出が出るので、爆発エフェクトを完全スキップ（オレンジ円がマネキンを隠さないよう）
-    const isKoHit = hit;
+    // 最後の一人のフィニッシュ演出だけ爆発エフェクトをスキップ（オレンジ円がマネキンを隠さないよう）。
+    // 途中のヒットは通常どおり爆発＋画面シェイクを出す
+    const isKoHit = hit && foundCount >= HIDERS;
     addBombMark(x, z, hit, isKoHit /* skipExplode */);
     updateSeekHud();
     Link.send('bomb', { x, z, hit, left: bombsLeft });
@@ -1377,8 +1378,8 @@
     if (net) return;
     if (phase !== 'done') return;
     bombsLeft = m.left; if (m.hit) foundCount++;
-    // KO演出を発火させるヒットは爆発エフェクト完全スキップ
-    const isKoHit = m.hit;
+    // 最後の一人のフィニッシュだけ爆発エフェクトをスキップ（途中のヒットは爆発＋シェイクあり）
+    const isKoHit = m.hit && foundCount >= HIDERS;
     addBombMark(m.x, m.z, m.hit, isKoHit /* skipExplode */);
     if (spectating) updateSeekHud();
     if (m.hit) {
@@ -1556,8 +1557,8 @@
         const b = list[bombsDrawn];
         foundSoFar += (b.hitIds || []).length;
         const isFinal = totalHiders > 0 && foundSoFar >= totalHiders;   // この爆弾で全員見つかった
-        // KO演出を発火するヒットは爆発エフェクト完全スキップ
-        const isKoHit = b.hit && (b.hitIds || []).length > 0;
+        // 最後の一人のフィニッシュだけ爆発エフェクトをスキップ（途中のヒットは爆発＋シェイクあり）
+        const isKoHit = isFinal && b.hit && (b.hitIds || []).length > 0 && phase === 'seek';
         addBombMark(b.x, b.z, b.hit, isKoHit /* skipExplode */);
         if (phase !== 'seek') continue;
         if (!b.hit) { toast(room.bombsLeft > 0 ? `はずれ… 残り ${room.bombsLeft} 発` : 'はずれ… 爆弾がなくなりました'); continue; }

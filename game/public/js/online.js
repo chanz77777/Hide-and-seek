@@ -59,10 +59,10 @@
   }
 
   // ---------- セッション（再読み込みしても部屋に戻れるように） ----------
-  function saveSession() { try { sessionStorage.setItem(SESSION_KEY, JSON.stringify(me)); } catch (_) {} }
+  function saveSession() { try { sessionStorage.setItem(SESSION_KEY, JSON.stringify(me)); } catch (_) { } }
   function loadSession() { try { return JSON.parse(sessionStorage.getItem(SESSION_KEY) || 'null'); } catch (_) { return null; } }
-  function clearSession() { try { sessionStorage.removeItem(SESSION_KEY); } catch (_) {} }
-  try { const n = localStorage.getItem('kakurenbo-name'); if (n) $('nameInput').value = n; } catch (_) {}
+  function clearSession() { try { sessionStorage.removeItem(SESSION_KEY); } catch (_) { } }
+  try { const n = localStorage.getItem('kakurenbo-name'); if (n) $('nameInput').value = n; } catch (_) { }
   const urlRoom = new URLSearchParams(location.search).get('room');
   if (urlRoom) $('codeInput').value = urlRoom.toUpperCase();
 
@@ -70,7 +70,7 @@
   function nameOrAsk() {
     const n = $('nameInput').value.trim();
     if (!n) { $('onlineMsg').textContent = '名前を入れてください'; $('nameInput').focus(); return null; }
-    try { localStorage.setItem('kakurenbo-name', n); } catch (_) {}
+    try { localStorage.setItem('kakurenbo-name', n); } catch (_) { }
     return n;
   }
   async function enter(fn) {
@@ -191,7 +191,7 @@
     $('lobbyMsg').textContent = !room.floorUrl
       ? (host ? '床の絵を選んでください（画像か自動生成）。' : 'ホストが床の絵を選ぶのを待っています。')
       : room.players.length < 2 ? '2 人以上集まると始められます。招待リンクを送ってください。'
-      : host ? '準備ができたら「はじめる」を押してください。' : 'ホストが始めるのを待っています。';
+        : host ? '準備ができたら「はじめる」を押してください。' : 'ホストが始めるのを待っています。';
     const cv = await ensureFloor().catch(() => null);
     const t = $('floorThumb').getContext('2d');
     t.fillStyle = '#e6e3da'; t.fillRect(0, 0, 160, 120);
@@ -205,13 +205,33 @@
       await act('set-floor', { url });
     } catch (e) { $('lobbyMsg').textContent = e.message; }
   }
-  $('lobbyImgFile').addEventListener('change', (e) => {
-    const f = e.target.files[0]; if (!f) return;
+  function loadLobbyImage(f) {
+    if (!f || !f.type.startsWith('image/')) { G.toast('画像ファイルを選んでください'); return; }
     const u = URL.createObjectURL(f), img = new Image();
     img.onload = () => { URL.revokeObjectURL(u); setFloorFromCanvas(G.cropToFloor(img)); };
     img.onerror = () => { URL.revokeObjectURL(u); G.toast('画像を読み込めませんでした'); };
-    img.src = u; e.target.value = '';
+    img.src = u;
+  }
+  $('lobbyImgFile').addEventListener('change', (e) => {
+    const f = e.target.files[0]; if (!f) return;
+    loadLobbyImage(f); e.target.value = '';
   });
+  // ロビーでも画像をドラッグ＆ドロップで選べるようにする（オフラインのタイトル画面と同じ操作。床を選べるのはホストだけ）
+  {
+    const ov = $('lobbyOverlay'), panel = ov.querySelector('.panel') || ov;
+    ov.addEventListener('dragover', (e) => {
+      e.preventDefault();                       // これがないとブラウザが画像をそのまま開いてしまう
+      if (isHost()) panel.classList.add('dragover');
+    });
+    ov.addEventListener('dragleave', (e) => {
+      if (!e.relatedTarget || !ov.contains(e.relatedTarget)) panel.classList.remove('dragover');
+    });
+    ov.addEventListener('drop', (e) => {
+      e.preventDefault(); panel.classList.remove('dragover');
+      if (!isHost()) { G.toast('床の絵を選べるのはホストだけです'); return; }
+      loadLobbyImage(e.dataTransfer.files && e.dataTransfer.files[0]);
+    });
+  }
   $('lobbyGenBtn').addEventListener('click', () => {
     setFloorFromCanvas(Floor.generate({ seed: Math.floor(Math.random() * 90000) + 1000 }).canvas);
   });
@@ -226,7 +246,7 @@
       .catch(() => { $('shareUrl').select(); G.toast('選択しました。コピーしてください'); });
   });
   $('leaveBtn').addEventListener('click', leave);
-  async function leave() { try { await act('leave'); } catch (_) {} end(''); }
+  async function leave() { try { await act('leave'); } catch (_) { } end(''); }
 
   // ----- 準備（隠れる / 待つ） -----
   async function enterPrep() {
@@ -236,8 +256,10 @@
     if (isSeeker()) { G.enterWaitOnline(room.prepEndsAt, room.prepSeconds); return; }
     if (myHider()) {
       // 全員が同じ場所から始まらないよう、床の内側のランダムな位置に置く
-      G.startHiding({ endsAt: room.prepEndsAt, prepSeconds: room.prepSeconds,
-        x: (Math.random() - 0.5) * 12, z: (Math.random() - 0.5) * 8, heading: Math.random() * Math.PI * 2 });
+      G.startHiding({
+        endsAt: room.prepEndsAt, prepSeconds: room.prepSeconds,
+        x: (Math.random() - 0.5) * 12, z: (Math.random() - 0.5) * 8, heading: Math.random() * Math.PI * 2
+      });
       return;
     }
     G.enterWaitOnline(room.prepEndsAt, room.prepSeconds);   // 途中参加: 次のラウンドから
@@ -255,8 +277,10 @@
         }));
         if (!isSeeker() && G.phase() === 'play') G.toast('時間内に送れなかったので、このラウンドは観戦です');
         // 見つける人も隠れる人も同じ真上の画面。隠れる人は観戦のみ（爆撃できない）
-        G.startSeekOnline({ hiders, endsAt: room.seekEndsAt, seekSeconds: room.seekSeconds,
-          bombsTotal: room.bombsTotal, bombsLeft: room.bombsLeft, spectator: !isSeeker() });
+        G.startSeekOnline({
+          hiders, endsAt: room.seekEndsAt, seekSeconds: room.seekSeconds,
+          bombsTotal: room.bombsTotal, bombsLeft: room.bombsLeft, spectator: !isSeeker()
+        });
         // 入る前に落ちていた爆弾は演出なしで並べる
       }
       G.syncBombs(room, me.playerId);
@@ -267,8 +291,10 @@
   async function renderResult(entered) {
     G.syncBombs(room, me.playerId);
     const res = room.result || {}, host = isHost();
-    const reasonText = { 'all-found': '全員見つかりました。', 'no-bombs': '爆弾がなくなりました。', timeout: '時間切れです。',
-      'no-hiders': '誰も隠れられませんでした。', 'seeker-left': '見つける人が抜けました。' }[res.reason] || '';
+    const reasonText = {
+      'all-found': '全員見つかりました。', 'no-bombs': '爆弾がなくなりました。', timeout: '時間切れです。',
+      'no-hiders': '誰も隠れられませんでした。', 'seeker-left': '見つける人が抜けました。'
+    }[res.reason] || '';
     const summary = `${reasonText}発見 ${res.found || 0} / ${res.total || 0} 人。`;
     if (!(entered || G.phase() !== 'result')) return;
     const back = host ? 'ロビーに戻る' : 'ホストを待っています';
@@ -308,7 +334,7 @@
       aimTimer = setTimeout(() => {
         aimTimer = 0; aimLastSent = Date.now();
         const p = aimPending; aimPending = null;
-        if (p && room && room.phase === 'seek') post('cursor', { code: me.code, playerId: me.playerId, token: me.token, x: p.x, z: p.z }).catch(() => {});
+        if (p && room && room.phase === 'seek') post('cursor', { code: me.code, playerId: me.playerId, token: me.token, x: p.x, z: p.z }).catch(() => { });
       }, Math.max(0, wait));
     },
     onResultBack() { if (isHost()) act('to-lobby').catch(e => G.toast(e.message)); },
