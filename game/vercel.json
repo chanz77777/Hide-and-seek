@@ -1,3 +1,9 @@
 {
-  "outputDirectory": "public"
+  "outputDirectory": "public",
+  "crons": [
+    {
+      "path": "/api/cron/cleanup-blobs",
+      "schedule": "0 3 * * *"
+    }
+  ]
 }
