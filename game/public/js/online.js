@@ -99,6 +99,7 @@
     me = session; saveSession();
     history.replaceState(null, '', `${location.pathname}?room=${me.code}`);
     G.attachNet(netHandlers);
+    G.dismissSplash && G.dismissSplash(true);   // 再読み込み後の復帰などでタイトルが残らないように
     $('titleOverlay').hidden = true;
     onRoom(r);
     startPolling();
@@ -301,13 +302,13 @@
     if (isSeeker()) {
       const win = res.total > 0 && res.found === res.total;
       G.showSeekResult(win ? '全員見つけた！' : res.found ? `${res.found} 人見つけた` : '逃げ切られた…',
-        summary + '黄色い輪が隠れていた場所です。', win || res.found > 0, back, host);
+        summary + '丸で囲んだ所が隠れていた場所です。', win || res.found > 0, back, host);
       return;
     }
     const mine = myHider();
     if (mine && !mine.found) G.cutin('逃げ切った！', 'win');
     G.showSeekResult(!mine ? '結果' : mine.found ? '見つかった…' : '逃げ切った！',
-      summary + '黄色い輪が隠れていた場所です。', !!mine && !mine.found, back, host);
+      summary + '丸で囲んだ所が隠れていた場所です。', !!mine && !mine.found, back, host);
   }
   $('lobbyBackBtn').addEventListener('click', () => act('to-lobby').catch(e => G.toast(e.message)));
 

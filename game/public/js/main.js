@@ -223,7 +223,7 @@
   function startRound(opts) {
     opts = opts || {};
     const proceed = () => {
-      koSeqs.length = 0; pendingCutin = null;
+      koSeqs.length = 0; pendingCutin = null; clearResultMarks();
       phase = 'play'; view = 'main';
       prepTotal = opts.prepSeconds || PREP_SECONDS; remaining = prepTotal;
       player.position.set(opts.x || 0, 0, opts.z || 0); heading = opts.heading || 0; player.rotation.set(0, heading, 0);
@@ -511,6 +511,8 @@
   let remoteAim = null;        // 観戦中に表示する見つける人の照準 { x, z, at }
   // カットイン演出（「〇〇をみつけた！」など）
   let koSeqs = [];   // 進行中の吹っ飛ばし演出（複数人ぶん）
+  let resultMarks = null;   // 結果画面の手描きマーク [{ x, z, name }]（null で非表示）
+  function clearResultMarks() { resultMarks = null; }
   let pendingCutin = null;            // フィニッシュ演出中に保留しているカットイン
   const FINISH_HOLD = 1.6;            // フィニッシュ: 場外バースト後、リザルトへ移るまでの余韻（秒）
   const finishFxActive = () => koSeqs.some(k => k.isFinal);
@@ -741,7 +743,7 @@
   // ----- 捜索（爆撃） -----
   function startSeek(data, noTransition) {
     const proceed = () => {
-      koSeqs.length = 0; pendingCutin = null;
+      koSeqs.length = 0; pendingCutin = null; clearResultMarks();
       if (data) applyPayload(data);
       phase = 'seek'; view = 'top';
       seekTotal = SEEK_SECONDS; seekEndsAt = nowMs() + seekTotal * 1000; seekRemaining = seekTotal;
@@ -848,7 +850,7 @@
     if (!koActive) { stage.classList.remove('shake'); void stage.offsetWidth; stage.classList.add('shake'); }
   }
   function clearBombs() {
-    koSeqs.length = 0; pendingCutin = null;
+    koSeqs.length = 0; pendingCutin = null; clearResultMarks();
     if (typeof smashCv !== 'undefined') smashCv.style.display = 'none';
     topCam.position.set(0, 30, 0); topCam.zoom = 1.0; topCam.updateProjectionMatrix();
     bombs.forEach(b => scene.remove(b)); bombs.length = 0;
@@ -1264,6 +1266,133 @@
     foundRing.visible = true;
   }
 
+  // =====================================================================
+  // リザルトの手描き風マーク（〇⇠ 名前）— motion-prompt #136「ラインボイル」
+  // 絵（丸・矢印）そのものは動かさず、線をあらかじめ点の列にしておき、
+  // 4.7 秒に 47 回（約 0.1 秒ごと）全部の点を横・縦に決め打ちの乱数でずらして描き直す。
+  // 隣の点の中点を通る 2 次曲線でつなぐ（手描きのコマのようにゆらぐ）。
+  // 乱数はコマ番号と点の番号から作る（同じコマはいつも同じ形）。
+  // =====================================================================
+  const MARK_Z = 8;                         // 重なり順（結果パネルより下。パネルに隠れるなら大きくする）
+  const MARK_COL = '#f2d64b';               // 丸・矢印の色（これまでの黄色い輪と同じ）
+  const MARK_FONT = '"Yomogi","Zen Kurenaido","Klee One","Hiragino Maru Gothic ProN","Yu Gothic",sans-serif';
+  const BOIL_FRAMES = 47, BOIL_CYCLE = 4.7, BOIL_JITTER = 5;   // コマ数 / 1 周の秒数 / ずらす幅(px, ±半分)
+  // @@marks-helpers-begin
+  const blHash = (n) => { const s = Math.sin(n * 12.9898) * 43758.5453; return s - Math.floor(s); };
+  function blDensify(pts, step) {
+    const out = [];
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = pts[i], b = pts[i + 1], c = Math.max(1, Math.round(Math.hypot(b[0] - a[0], b[1] - a[1]) / step));
+      for (let j = 0; j < c; j++) out.push([a[0] + (b[0] - a[0]) * j / c, a[1] + (b[1] - a[1]) * j / c]);
+    }
+    out.push(pts[pts.length - 1]);
+    return out;
+  }
+  // 丸・矢印の軸・矢じりの点列（丸の中心が原点。s=+1 で矢印を右側、-1 で左側に出す）
+  function blBuildGeo(seed, R, L, s) {
+    const a0 = -2.3 + (blHash(seed) - 0.5) * 0.9, sweep = Math.PI * 2 * 1.1;   // 少し重ねて書き終える手書きの丸
+    const n = Math.max(28, Math.round(sweep * R / 6));
+    const p1 = blHash(seed + 1) * 6.283, p2 = blHash(seed + 2) * 6.283;
+    const circle = [];
+    for (let i = 0; i <= n; i++) {
+      const t = i / n, a = a0 + sweep * t, r = R * (1 + 0.07 * Math.sin(2 * a + p1) + 0.04 * Math.sin(3 * a + p2) + 0.07 * (t - 0.5));
+      circle.push([Math.cos(a) * r, Math.sin(a) * r]);
+    }
+    const hx = s * R * 1.18, hy = (blHash(seed + 3) - 0.5) * R * 0.2;
+    const tx = s * (R * 1.18 + L), ty = hy + (blHash(seed + 4) - 0.5) * R * 0.5, bow = (blHash(seed + 5) - 0.5) * L * 0.35;
+    const raw = blDensify([[tx, ty], [hx, hy]], 6);
+    const shaft = raw.map((p, j) => [p[0], p[1] + bow * Math.sin(Math.PI * j / (raw.length - 1))]);
+    const len = 12 + R * 0.12, t1 = 0.45 + blHash(seed + 6) * 0.2, t2 = 0.45 + blHash(seed + 7) * 0.2;
+    const head = blDensify([[hx + s * len * Math.cos(t1), hy - len * Math.sin(t1)], [hx, hy], [hx + s * len * Math.cos(t2), hy + len * Math.sin(t2)]], 6);
+    return { R, L, s, tx, ty, circle, shaft, head };
+  }
+  // 点列を 1 コマぶんずらして、中点を通る 2 次曲線で描く
+  function blStroke(k, pts, ox, oy, fi, salt, width, dash) {
+    const q = pts.map((p, j) => [
+      ox + p[0] + (blHash(fi * 7919 + j * 131 + salt * 17) - 0.5) * BOIL_JITTER,
+      oy + p[1] + (blHash(fi * 6007 + j * 97 + salt * 29 + 5) - 0.5) * BOIL_JITTER]);
+    const n = q.length, mid = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+    k.beginPath(); k.moveTo(q[0][0], q[0][1]);
+    for (let j = 1; j < n - 1; j++) { const m = mid(q[j], q[j + 1]); k.quadraticCurveTo(q[j][0], q[j][1], m[0], m[1]); }
+    k.lineTo(q[n - 1][0], q[n - 1][1]);
+    k.setLineDash(dash || []);
+    k.strokeStyle = 'rgba(20,20,30,0.55)'; k.lineWidth = width + 4; k.stroke();   // 下地（明るい床でも見えるように）
+    k.strokeStyle = MARK_COL; k.lineWidth = width; k.stroke();
+    k.setLineDash([]);
+  }
+  // @@marks-helpers-end
+
+  const markCv = document.createElement('canvas');
+  markCv.id = 'markCanvas';
+  markCv.style.cssText = `position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:${MARK_Z};display:none;`;
+  document.body.appendChild(markCv);
+  const markCtx = markCv.getContext('2d');
+  const blV = new THREE.Vector3();
+  let markShown = false, markKey = '';
+
+  // 毎フレーム呼ぶ。マークがなければ何もしない。描き直すのは約 0.1 秒ごと（位置が変わったときも）
+  function updateResultMarks() {
+    if (!resultMarks || !resultMarks.length) {
+      if (markShown) { markCv.style.display = 'none'; markShown = false; markKey = ''; }
+      return;
+    }
+    const w = window.innerWidth, h = window.innerHeight;
+    const fi = Math.floor(performance.now() / 1000 / (BOIL_CYCLE / BOIL_FRAMES)) % BOIL_FRAMES;
+    const rect = canvas.getBoundingClientRect(), cam = view === 'top' ? topCam : camera;
+    const toScreen = (x, z) => { blV.set(x, 0, z).project(cam); return [rect.left + (blV.x + 1) / 2 * rect.width, rect.top + (1 - blV.y) / 2 * rect.height, blV.z]; };
+    const items = [];
+    resultMarks.forEach((m, i) => {
+      const [cx, cy, cz] = toScreen(m.x, m.z);
+      if (cz < -1 || cz > 1) return;
+      const [ux, uy] = toScreen(m.x + 1, m.z);
+      items.push({ m, i, cx, cy, unit: Math.hypot(ux - cx, uy - cy) });
+    });
+    const key = fi + '|' + w + 'x' + h + '|' + items.map(it => `${it.m.name}:${it.cx | 0},${it.cy | 0},${it.unit | 0}`).join(';');
+    if (key === markKey) return;
+    markKey = key;
+
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    if (markCv.width !== Math.floor(w * dpr) || markCv.height !== Math.floor(h * dpr)) {
+      markCv.width = Math.floor(w * dpr); markCv.height = Math.floor(h * dpr);
+    }
+    if (!markShown) { markCv.style.display = 'block'; markShown = true; }
+    const k = markCtx;
+    k.setTransform(dpr, 0, 0, dpr, 0, 0); k.clearRect(0, 0, w, h);
+    k.lineCap = 'round'; k.lineJoin = 'round';
+    items.forEach(({ m, i, cx, cy, unit }) => {
+      const seed = i * 13 + 7;
+      const R = clamp(unit * 0.6, 20, 64), L = clamp(R * 1.1, 36, 70), fs = clamp(R * 0.6, 15, 26);
+      const name = (m.name || '').length > 10 ? m.name.slice(0, 9) + '…' : (m.name || '');
+      k.font = `700 ${fs}px ${MARK_FONT}`;
+      const reach = R * 1.18 + L + 10 + k.measureText(name).width;
+      const s = (cx + reach > w - 6 && cx - reach > 6) ? -1 : 1;     // 右にはみ出すなら矢印と名前を左側に出す
+      if (!m.geo || m.geo.R !== R || m.geo.L !== L || m.geo.s !== s) m.geo = blBuildGeo(seed, R, L, s);
+      const g = m.geo;
+      blStroke(k, g.circle, cx, cy, fi, seed * 10, 5.5);
+      blStroke(k, g.shaft, cx, cy, fi, seed * 10 + 1, 4.5, [12, 9]);   // ⇠ の点線の軸
+      blStroke(k, g.head, cx, cy, fi, seed * 10 + 2, 4.5);
+      if (name) {
+        k.save();
+        k.translate(cx + g.tx + s * 10 + (blHash(fi * 31 + seed) - 0.5) * 2.4, cy + g.ty + (blHash(fi * 37 + seed) - 0.5) * 2.4);
+        k.rotate(-0.03 + (blHash(fi * 41 + seed) - 0.5) * 0.04);
+        k.textAlign = s > 0 ? 'left' : 'right'; k.textBaseline = 'middle';
+        k.lineWidth = 5; k.strokeStyle = 'rgba(20,20,30,0.85)'; k.strokeText(name, 0, 0);
+        k.fillStyle = '#fff'; k.fillText(name, 0, 0);
+        k.restore();
+      }
+    });
+  }
+  // 結果画面でマークを出す（ローカル: 自分 1 人 / オンライン: 全員）
+  function showResultMarksLocal() {
+    foundRing.visible = false;
+    const nm = (document.getElementById('nameInput')?.value || '').trim();
+    resultMarks = [{ x: player.position.x, z: player.position.z, name: nm || 'かくれた人' }];
+  }
+  function showResultMarksOnline() {
+    foundRing.visible = false;
+    resultMarks = [...remotes.values()].map(r => { r.ring.visible = false; return { x: r.x, z: r.z, name: r.name || '' }; });
+  }
+
   // 命中判定: 真上から見た体（全頂点）が爆風の円に入っているか
   const tv = new THREE.Vector3();
   function hitTest(x, z) {
@@ -1348,11 +1477,11 @@
     $('resultTitle').textContent = found ? '見つけた！' : '逃げ切られた…';
     $('resultTitle').className = found ? 'win' : 'lose';
     $('resultMsg').textContent = found
-      ? `${used} 発目で発見（${t} 秒）。黄色い輪が隠れていた場所です。`
-      : (reason === 'timeout' ? '時間切れ。' : '爆弾を使い切りました。') + '黄色い輪が隠れていた場所です。';
+      ? `${used} 発目で発見（${t} 秒）。丸で囲んだ所が隠れていた場所です。`
+      : (reason === 'timeout' ? '時間切れ。' : '爆弾を使い切りました。') + '丸で囲んだ所が隠れていた場所です。';
     Link.send('result', { found, used, seconds: t, reason });
     playLiquidTransition(found, () => {
-      showFound(); setShading(1);
+      showResultMarksLocal(); setShading(1);
     }, () => {
       showResultPanel();
     });
@@ -1400,7 +1529,7 @@
     $('resultBackBtn').textContent = 'タイトルに戻る'; $('resultBackBtn').disabled = false;
     if (!m.found) cutin('逃げ切った！', 'win');
     playLiquidTransition(!m.found, () => {
-      showFound(); setShading(1);
+      showResultMarksLocal(); setShading(1);
     }, () => {
       showResultPanel();
     });
@@ -1427,7 +1556,7 @@
       setResultFolded(false);
       $('titleOverlay').hidden = !!opts.keepHidden;
       $('againBtn').hidden = false; clearRemotes(); spectating = false; remoteAim = null; $('cutin').hidden = true;
-      koSeqs.length = 0; pendingCutin = null;
+      koSeqs.length = 0; pendingCutin = null; clearResultMarks();
       player.rotation.set(0, heading, 0); player.visible = true;
       clearBombs(); setShading(0); painter.reset();
       stage.classList.remove('topview');
@@ -1497,7 +1626,7 @@
     holder.add(body.group); holder.position.set(x, 0, z); holder.rotation.y = h; scene.add(holder);
     const ring = new THREE.Mesh(foundRing.geometry, foundRing.material);
     ring.rotation.x = -Math.PI / 2; ring.renderOrder = 30; ring.position.set(x, 0.01, z); ring.visible = false; scene.add(ring);
-    remotes.set(id, { holder, body, ring });
+    remotes.set(id, { holder, body, ring, x, z, name: '' });
     setShading(shading);
   }
   function clearRemotes() {
@@ -1514,7 +1643,7 @@
     detachNet() { net = null; },
     setClockOffset(ms) { clockOffset = ms; },
     phase: () => phase,
-    toast, setHud, applyFloorCanvas, resetToTitle,
+    toast, setHud, applyFloorCanvas, resetToTitle, dismissSplash,
     floorCanvas: () => floorCanvas,
     titleFloorCanvas: () => (floorSource === 'img' ? imageCanvas : (floorSource === 'gen' ? floorCanvas : null)),
     startHiding(o) { startRound(o); },
@@ -1575,7 +1704,7 @@
       }
       bombsLeft = room.bombsLeft; bombsTotal = room.bombsTotal || bombsTotal;
       foundCount = (room.hiders || []).filter(h => h.found).length;
-      (room.hiders || []).forEach(h => { const r = remotes.get(h.id); if (r) r.ring.visible = h.found; });
+      (room.hiders || []).forEach(h => { const r = remotes.get(h.id); if (r) { r.name = h.name || r.name; r.ring.visible = h.found && phase !== 'result'; } });
       if (phase === 'seek') updateSeekHud();
     },
     resetBombs() { clearBombs(); bombsDrawn = 0; },
@@ -1587,7 +1716,7 @@
       $('resultBackBtn').textContent = backLabel; $('resultBackBtn').disabled = !backEnabled;
       playLiquidTransition(win, () => {
         setShading(1);
-        remotes.forEach(r => { r.ring.visible = true; });
+        showResultMarksOnline();
       }, () => {
         showResultPanel();
       });
@@ -1646,6 +1775,8 @@
     // ブラシカーソルは world 単位なので人の縮尺に合わせる
     if (painter.cursor.visible) painter.cursor.scale.setScalar((painter.mode === 'fill' ? 0.02 : painter.size) * PLAYER_SCALE);
     renderer.render(scene, view === 'top' ? topCam : camera);
+    updateResultMarks();
+    if (splash && !splash.hidden) pollSplashPad();
     if (!$('pip').hidden) renderPip();
     requestAnimationFrame(loop);
   }
@@ -1681,6 +1812,33 @@
     stepFx: (sec) => { const f = fxFrozen; fxFrozen = false; stepAnims(sec); fxFrozen = f; },
   };
 
+  // ---------- タイトル画面（Press Any Button） ----------
+  // 起動直後はロゴ + 点滅の「Press Any Button」を出し、キー・クリック・タップ・パッドのどれかで今のメニューへ進む。
+  // 開いたときは画面遷移アニメーションなし。進むときだけ液体トランジションを使う（即切替にしたいなら dismissSplash(true)）。
+  const splash = $('splashOverlay');
+  let splashBusy = false;
+  function dismissSplash(instant) {
+    if (!splash || splash.hidden || splashBusy) return;
+    if (instant) { splash.hidden = true; return; }
+    splashBusy = true;
+    playLiquidTransition('title', () => { splash.hidden = true; }, () => { splashBusy = false; });
+  }
+  function pollSplashPad() {
+    const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+    for (const p of pads) if (p && p.buttons.some(b => b.pressed)) { dismissSplash(); return; }
+  }
+  if (splash) {
+    // 開発用フラグ（#start など）で直接開くときは、タイトルを飛ばす
+    if (location.hash.slice(1).split(',').some(f => ['start', 'seek', 'hotseat', 'imgtest'].includes(f))) splash.hidden = true;
+    splash.addEventListener('click', () => dismissSplash());
+    document.addEventListener('keydown', (e) => {
+      if (splash.hidden) return;
+      if (e.repeat || e.ctrlKey || e.metaKey || e.altKey || ['Shift', 'Control', 'Alt', 'Meta'].includes(e.key)) return;
+      e.preventDefault(); e.stopPropagation();   // 押したキーが裏のボタンなどに届かないように
+      dismissSplash();
+    }, true);
+  }
+
   // ---------- 起動 ----------
   requestAnimationFrame(() => {   // タイトルを先に描いてから床を生成
     setMode('move'); setShading(0); updateTimer(); updateCamera(0, true);
@@ -1688,9 +1846,7 @@
     requestAnimationFrame(loop);
     // 開発用: index.html#start / #start,paint / #start,top で画面を直接開く
     const flags = location.hash.slice(1).split(',');
-    if (!flags.some(f => ['start', 'seek', 'hotseat', 'imgtest'].includes(f))) {
-      playLiquidTransition('title'); // 初回/タイトル画面表示: ミント・ターコイズ
-    }
+    // タイトル画面を開いたときは画面遷移アニメーションを出さない（Press Any Button を押したときに遷移する）
     if (flags.includes('start')) {
       if (!floorCanvas) setFloorSource('gen');   // 開発用フラグで直接始めるときは床を生成
       startRound();
